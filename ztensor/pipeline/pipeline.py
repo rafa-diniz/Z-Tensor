@@ -1,11 +1,13 @@
 import torch
-import typing
 
 from ztensor.utils import video
 from ztensor.codec import encoder, decoder, i_frames
-from ztensor.effects import histogram, blur, edge_detect
+from ztensor.effects import chroma, histogram, blur, edge_detect
 
-def encode_pipeline(input_path: str, device: torch.device, memory_budget: int, compression_factor: int, num_threads: int) -> typing.Tuple[torch.Tensor, bytes]:
+from typing import Tuple
+
+
+def encode_pipeline(input_path: str, device: torch.device, memory_budget: int, compression_factor: int, num_threads: int, chroma_subsample: str) -> Tuple[torch.Tensor, bytes]:
     video_bgr         = video.read_video(input_path).to(device)
     video_grayscale   = video.bgr_to_grayscale(video_bgr)
 
@@ -17,14 +19,38 @@ def encode_pipeline(input_path: str, device: torch.device, memory_budget: int, c
     troi_slices       = histogram.temporal_region_of_interest(blurred_histogram)
     i_frame_indices   = i_frames.select_i_frames(video_edges, troi_slices)
 
-    encoded_video = encoder.encode_video(video_bgr, i_frame_indices, compression_factor, num_threads)
 
-    return video_bgr, encoded_video
+    if chroma_subsample == 'quarter':
+        video_yuv         = chroma.bgr2yuv(video_bgr)
+
+        subsampled_video  = chroma.subsample_chroma_420(video_yuv)
+        y, u, v           = subsampled_video
+
+        pixel_format = 'I420'
+        planes       = [ y, u, v ]
+    
+    elif chroma_subsample == 'half-width':
+        video_yuv         = chroma.bgr2yuv(video_bgr)
+
+        subsampled_video  = chroma.subsample_chroma_422(video_yuv)
+        y, u, v           = subsampled_video
+
+        pixel_format = 'I422'
+        planes       = [ y, u, v ]
+
+    else:
+        pixel_format = 'RGB3'
+        planes       = [ video_bgr[..., 0], video_bgr[..., 1], video_bgr[..., 2] ]
 
 
-def decode_pipeline(bytes_data: bytes) -> torch.Tensor:
+    compressed_planes = encoder.encode_video(planes, i_frame_indices, compression_factor, num_threads, pixel_format)
 
-    decoded_video = decoder.decode(bytes_data)
+    return video_bgr, compressed_planes
+
+
+def decode_pipeline(bytes_data: bytes, device: torch.device) -> torch.Tensor:
+
+    decoded_video = decoder.decode_video(bytes_data, device)
 
     return decoded_video
 
