@@ -23,11 +23,13 @@ def make_parser() -> ArgumentParser:
                         help="Run encode/decode and calculate PSNR and SSIM metrics.")
     
     parser.add_argument('-cf', '--compression-factor', type=int, default=16,
-                        help="The compression factor for zstandard. Higher values lead to better compression, but increase encode time. Accepted values go from 1 to 20.")
+                        help="The compression factor for zstandard. Higher values lead to better compression, but increase encode time. Accepted values go from 1 to 20. Default = 16")
     
-    parser.add_argument('-t', '--threads', type=int, default=-1,
-                        help="The number of threads zstandard is allowed to use for compression. The default uses all your CPU threads.")
+    parser.add_argument('-t', '--threads', type=int, default=4,
+                        help="The number of threads zstandard is allowed to use for compression. Default = 4.")
     
+    parser.add_argument('--chroma', type=str, default='quarter', choices=['full', 'half-width', 'quarter'], help="The level for chroma subsampling. \'full\' is 444/No chroma subsampling, \'half-width\' is 422, \'quarter\' is 420. Default = quarter")
+
     parser.add_argument('-mem', type=str, default='2G',
                         help="The amount of memory that the motion estimation algorithm is allowed to use. Use G for GB and M for MB. The default is 2G. The codec respects this memory limit regardless of the value for \'-device\'")
 
