@@ -40,7 +40,7 @@ def decode_video(compressed_bytes: bytes, device: torch.device) -> torch.Tensor:
         video = chroma.yuv2bgr(video)
 
 
-    elif pixel_format == 'RGB3':
+    elif pixel_format == 'RGB3': # This means the video is RGB, so we just concatenate the channels along the last axis to form the RGB video.
         planes_decoded[0] = planes_decoded[0].unsqueeze(-1)
         planes_decoded[1] = planes_decoded[1].unsqueeze(-1)
         planes_decoded[2] = planes_decoded[2].unsqueeze(-1)
@@ -64,8 +64,8 @@ def decompress_video(compressed_bytes: bytes, device: torch.device) -> typing.Tu
 
     quantization_parameter = int.from_bytes(decompressed_bytes[current_byte : current_byte+1], signed=False)
 
-    datatype_format_np    = np.int8      if quantization_parameter in [1, 2] else np.uint8
-    datatype_format_torch = torch.int8   if quantization_parameter in [1, 2] else torch.uint8
+    datatype_format_np    = np.int8      if quantization_parameter in [1] else np.uint8
+    datatype_format_torch = torch.int8   if quantization_parameter in [1] else torch.uint8
     num_bytes_per_pixel   = 1
 
     current_byte         += 1
@@ -94,12 +94,12 @@ def decompress_video(compressed_bytes: bytes, device: torch.device) -> typing.Tu
         plane         = np.frombuffer(decompressed_bytes[current_byte : current_byte + plane_len], dtype=datatype_format_np).copy()
         plane         = torch.as_tensor(plane, dtype=datatype_format_torch, device=device).reshape(tuple(shape))
         
-        if quantization_parameter in [1, 2]:
+        if quantization_parameter in [1]:
             plane   = quantization.dequantize(plane, quantization_parameter)
 
         current_byte += plane_len
 
-        if quantization_parameter not in [1, 2]:
+        if quantization_parameter not in [1]:
             plane = plane.to(torch.uint8)
 
         planes.append(plane)
