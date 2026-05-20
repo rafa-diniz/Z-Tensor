@@ -1,8 +1,8 @@
 # Z-Tensor
 
-**My Custom-Made Hardware-Accelerated Video Codec!**
+## My Custom-Made Hardware-Accelerated Video Codec!
 
-Z-Tensor is my GPU-accelerated video codec that encodes raw videos into a compact `.ztensor` file using scene-aware keyframes, chroma subsampling, frame differencing, optional quantization, and Zstandard entropy coding. And then decodes it back! Lossless and lossy modes are both supported, and the user can choose between using the CPU or GPU.
+Z-Tensor is a GPU-accelerated video codec that encodes raw videos into a compact `.ztensor` file using scene-aware keyframes, chroma subsampling, frame differencing, optional quantization, and Zstandard entropy coding. And then decodes it back! Lossless and lossy modes are both supported, and the user can choose between using the CPU or GPU.
 
 The library gets its name from its two main components: **Z** comes from Zstandard, which is used as the entropy coder, and **Tensor** because every pixel-level step in the pipeline runs as a PyTorch tensor op on the GPU.
 
