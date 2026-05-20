@@ -6,7 +6,7 @@ Z-Tensor is a GPU-accelerated video codec that encodes raw videos into a compact
 
 The library gets its name from its two main components: **Z** comes from Zstandard, which is used as the entropy coder, and **Tensor** because every pixel-level operation in the pipeline runs as a PyTorch tensor op on the GPU.
 
-Z-Tensor is not a wrapper around FFmpeg or any other existing codec :) Every step in both the encoder and decoder are implemented from scratch using just tensor operations.
+Z-Tensor is not a wrapper around FFmpeg or any other existing codec :) Every step in the encoder and decoder are implemented from scratch using just tensor operations.
 
 ---
 
