@@ -7,10 +7,9 @@ from typing import List
 
 from ztensor.effects import quantization
 
-def encode_video(planes: List[torch.Tensor], i_frame_indices: torch.Tensor, compression_factor: int, num_threads: int, pixel_format: str, quantize: bool) -> bytes:
-
+def encode_video(planes: List[torch.Tensor], i_frame_indices: torch.Tensor, compression_factor: int, num_threads: int, pixel_format: str, quantization_parameter: int) -> bytes:
     header  = pixel_format.encode('ascii')
-    header += quantize.to_bytes(1)                                       # bool   whether the pixel values are quantized or not
+    header += quantization_parameter.to_bytes(1, signed=False)           # uint8  value for the quantization parameter. 1 = Linear (less aggresive), 2 = logarithmic (more aggresive)
     header += len(planes).to_bytes(1, signed=False)                      # uint8  the number of planes in the video.
     header += len(i_frame_indices).to_bytes(4, signed=False)             # uint32 the number of i-frames in the video
     header += i_frame_indices.cpu().numpy().astype(np.uint32).tobytes()  # uint32 indices of the i-frames
@@ -36,9 +35,10 @@ def encode_video(planes: List[torch.Tensor], i_frame_indices: torch.Tensor, comp
 
         plane_shape    = np.array(plane_tensor.shape, dtype=np.int32).tobytes()
 
-        if quantize:
-            plane_tensor = quantization.downsample(plane_tensor).to(torch.int8)
-
+        if quantization_parameter :
+            plane_tensor = quantization.quantize(plane_tensor, quantization_parameter).to(torch.int8)
+        else:
+            plane_tensor = plane_tensor.to(torch.uint8)
 
         plane_bytes    = plane_tensor.cpu().numpy().tobytes()
         

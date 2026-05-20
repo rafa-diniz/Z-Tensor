@@ -30,7 +30,7 @@ def make_parser() -> ArgumentParser:
     
     parser.add_argument('-c', '--chroma', type=str, default='quarter', choices=['full', 'half-width', 'quarter'], help="The level for chroma subsampling. \'full\' is 444/No chroma subsampling, \'half-width\' is 422, \'quarter\' is 420. Default = quarter")
 
-    parser.add_argument('-q', '--quantize', action='store_true', default=False, help="Quantizes the residuals down by a factor of 2 to allow the frames to be stored in int8 instead of int16. Reduces final filesize by half with usually unnoticeable loss. Default = Off")
+    parser.add_argument('-qp', '--quantization-parameter', type=int, default=0, help="Whether to quantize the residuals to improve compression ratios by forcing more residuals into the same values. 0 = No Quantization (lossless residuals), 1 = Linear (lossy, but still very high fidelity). Default = 0")
 
     parser.add_argument('-mem', type=str, default='2G',
                         help="The amount of memory that the motion estimation algorithm is allowed to use. Use G for GB and M for MB. The codec respects this memory limit regardless of the value for \'-device\'. Default = 2G")

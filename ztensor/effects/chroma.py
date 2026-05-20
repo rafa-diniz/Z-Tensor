@@ -13,10 +13,12 @@ def bgr2yuv(bgr_video: torch.Tensor) -> torch.Tensor:
     '''
 
     bgr_weights = torch.Tensor([0.114, 0.587, 0.299]).to(bgr_video.device)
-    
+    b = bgr_video[:, :, :, 0].unsqueeze(-1)
+    r = bgr_video[:, :, :, 2].unsqueeze(-1)
+
     y = torch.sum(bgr_video * bgr_weights, dim=-1).unsqueeze(-1)
-    u = (0.492 * (bgr_video[:, :, :, 0].unsqueeze(-1) - y))
-    v = (0.877 * (bgr_video[:, :, :, 2].unsqueeze(-1) - y))
+    u = 128 + (0.492 * (b - y)) 
+    v = 128 + (0.877 * (r - y))
     
     yuv_video = torch.cat([y, u, v], dim=-1)
 
@@ -33,10 +35,13 @@ def yuv2bgr(yuv_video: torch.Tensor) -> torch.Tensor:
     G = Y - (0.395 * U) - (0.581 * V)
     B = Y + (2.032 * U)
     '''
+    y = yuv_video[:,:,:, 0]
+    u = yuv_video[:,:,:, 1] - 128
+    v = yuv_video[:,:,:, 2] - 128
 
-    r = yuv_video[:,:,:, 0] + (1.140 * yuv_video[:,:,:, 2])
-    g = yuv_video[:,:,:, 0] - (0.395 * yuv_video[:,:,:, 1]) - (0.581 * yuv_video[:,:,:, 2])
-    b = yuv_video[:,:,:, 0] + (2.032 * yuv_video[:,:,:, 1])
+    r = y + (1.140 * v)
+    g = y - (0.395 * u) - (0.581 * v)
+    b = y + (2.032 * u)
 
     r = r.unsqueeze(-1)
     g = g.unsqueeze(-1)

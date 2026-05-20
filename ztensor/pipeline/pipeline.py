@@ -7,7 +7,7 @@ from ztensor.effects import chroma, histogram, blur, edge_detect
 from typing import Tuple
 
 
-def encode_pipeline(input_path: str, device: torch.device, memory_budget: int, compression_factor: int, num_threads: int, chroma_subsample: str, quantize: bool) -> Tuple[torch.Tensor, bytes]:
+def encode_pipeline(input_path: str, device: torch.device, memory_budget: int, compression_factor: int, num_threads: int, chroma_subsample: str, quantization_parameter: bool) -> Tuple[torch.Tensor, bytes]:
     video_bgr         = video.read_video(input_path).to(device)
     video_grayscale   = video.bgr_to_grayscale(video_bgr)
 
@@ -43,7 +43,7 @@ def encode_pipeline(input_path: str, device: torch.device, memory_budget: int, c
         planes       = [ video_bgr[..., 0], video_bgr[..., 1], video_bgr[..., 2] ]
 
 
-    compressed_planes = encoder.encode_video(planes, i_frame_indices, compression_factor, num_threads, pixel_format, quantize)
+    compressed_planes = encoder.encode_video(planes, i_frame_indices, compression_factor, num_threads, pixel_format, quantization_parameter)
 
     return video_bgr, compressed_planes
 
