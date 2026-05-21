@@ -6,6 +6,7 @@ import numpy as np
 from typing import List
 
 from ztensor.effects import quantization
+from ztensor.codec import block_matching
 
 def encode_video(planes: List[torch.Tensor], i_frame_indices: torch.Tensor, compression_factor: int, num_threads: int, pixel_format: str, quantization_parameter: int) -> bytes:
     header  = pixel_format.encode('ascii')
@@ -19,6 +20,9 @@ def encode_video(planes: List[torch.Tensor], i_frame_indices: torch.Tensor, comp
     for plane_tensor in planes:
         # Cast to int16 to calculate P-frames. Since the P-frames are only integer values, int16 will do just fine.
         plane_tensor = plane_tensor.to(torch.int16)
+
+        block_matching.block_matching(plane_tensor, 2)
+        raise Exception
 
         # Calculate the P-frames
         p_frames = torch.diff(plane_tensor, dim=0)
