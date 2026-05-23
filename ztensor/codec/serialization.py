@@ -1,5 +1,4 @@
 import torch
-import typing
 import numpy as np
 
 
@@ -42,12 +41,24 @@ def serialize_payload(num_motion_blocks_per_frame: int,
                       plane: torch.Tensor, 
                       i_frame_indices: torch.Tensor, 
                       original_plane_h: int, 
-                      original_plane_w: int):
-    
+                      original_plane_w: int) -> bytes:
+    """Serialize the payload of the encoded video
+
+    Args:
+        num_motion_blocks_per_frame (int): The number of motion blocks in each frame #TODO maybe remove? I think this is always the same value as just doing len(motion_blocks[1]). 
+        motion_blocks (dict): The motion blocks. Stores the motion vectors and the residue for each block
+        plane (torch.Tensor): The unprocessed frame. Will be used to store the i-frames as themselves instead of processed blocks.
+        i_frame_indices (torch.Tensor): The indices of the i-frames
+        original_plane_h (int): The original height of the plane.
+        original_plane_w (int): The original width of the plane.
+
+    Returns:
+        bytes: _description_
+    """
     payload = bytes()
 
-    payload += original_plane_w.to_bytes(4,  signed=False)             # uint32 the height of the video
-    payload += original_plane_h.to_bytes(4,  signed=False)             # uint32 the width of the video
+    payload += original_plane_h.to_bytes(4,  signed=False)             # uint32 the height of the video
+    payload += original_plane_w.to_bytes(4,  signed=False)             # uint32 the width of the video
     payload += num_motion_blocks_per_frame.to_bytes(4, signed=False)   # uint32 the number of motion blocks in each video frame
 
 
