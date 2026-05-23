@@ -8,8 +8,10 @@ def patchId2Coords(patchId, block_width, blocks_in_plane_width):
 
 # Converts coordinates to patchIds taking into account how many blocks each row in the frame supports. 
 def coords2PatchId(coords, block_width, blocks_in_plane_width):
-    x, y = coords
+    x, y = coords[..., 0], coords[..., 1]
     return (y // block_width) * blocks_in_plane_width + (x//block_width)
+
+
 
 def sad(block_a, block_b):
     """Sum of absolute differences
@@ -25,40 +27,36 @@ def sad(block_a, block_b):
     return scores
 
 
+
 def get_candidate_patches(current_coords, search_radius, block_width, w, h):
     # For each patch, we explore the <block_width> neighborhood and store the patchIds of each neighboring patch.
     # Note that these patchIds refer to the patches with stride 1! Not the ones with stride <block_width>!
     # The idea is to slide the window centered in the current coordinates in all neighboring directions moving 1 pixel at a time,
     # and then store the IDs of these neighboring patches. They will later be compared to the original patch centered in the current
     # coordinates to find the neighboring 8x8 patch that is the most similar to the current one.
-    patchIds_compare_to_in_prev_frame  = []
+
+    offsets = [ [0, 0] ]
+    for s in ["+", "-"]:
+        for i in range(search_radius+1):
+            if s == "-":
+                i = -i
+            for j in range(search_radius+1):
+                if s == "-":
+                    j = -j
+                if i + j != 0:
+                    offsets.append([i, j])
     
-    current_x, current_y               = current_coords
+    offset_coords = current_coords + torch.as_tensor(offsets, device=current_coords.device)
+    mask_negative = torch.any(offset_coords < 0, dim=-1)
+    mask_within_max_width  = offset_coords[..., 0] + block_width < w
+    mask_within_max_height = offset_coords[..., 1] + block_width < h
+    
+    offset_coords = offset_coords[~mask_negative & mask_within_max_width & mask_within_max_height]
 
-    #TODO This is begging for a refactor. It's just too slow and should run on the GPU.
-    for i in range(search_radius+1):
-        for j in range(search_radius+1):
-            # The rightmost pixel index has to be less than w, and the bottommost one has to be less than h.
-            # < instead of <= because we're using indexes, and if the rightmost index == w, this will cause an out of bounds error
-            if current_x+i+block_width < w: 
-                if  current_y+j+block_width < h:
-                    patchIds_compare_to_in_prev_frame.append(coords2PatchId([current_x+i, current_y+j], 1, w-block_width+1)) # This -(block_width) in w-(block_width) is necessary because we currently don't support
-                                                                                                                            # videos with dimensions that aren't perfectly divisible by block_width x block_width
-                
+    patchIds_compare_to_in_prev_frame = coords2PatchId(offset_coords, 1, w-block_width+1)
+    patchIds_compare_to_in_prev_frame = torch.as_tensor(patchIds_compare_to_in_prev_frame, dtype=torch.int32)
 
-                # Skip patches where i + j = 0, because that one was already added in the line above. It's a base one that always gets added.
-                if  current_y - j >= 0 and (i +j != 0):
-                    patchIds_compare_to_in_prev_frame.append(coords2PatchId([current_x+i, current_y-j], 1, w-block_width+1))
-            
-            if current_x - i >= 0:
-                if current_y+j+block_width < h and (i +j != 0):
-                    patchIds_compare_to_in_prev_frame.append(coords2PatchId([current_x-i, current_y+j], 1, w-block_width+1))
-
-                if current_y - j >= 0 and (i +j != 0):
-                    patchIds_compare_to_in_prev_frame.append(coords2PatchId([current_x-i, current_y-j], 1, w-block_width+1))
-
-
-    return torch.as_tensor(patchIds_compare_to_in_prev_frame, dtype=torch.int32)
+    return patchIds_compare_to_in_prev_frame
 
 
 def block_matching(plane, block_width, search_radius):
@@ -76,10 +74,10 @@ def block_matching(plane, block_width, search_radius):
     unfold_window   = torch.nn.Unfold(kernel_size=(block_width,block_width), stride=block_width)
     unfold_stride_1 = torch.nn.Unfold(kernel_size=(block_width,block_width), stride=1)
 
-
     motion_vectors_patches = {}
+
     for idx in range(1, num_frames):
-        if DEBUG:
+        if True:
             print(f"Processing: Frame{idx}")
 
         # Stores the dx and dy motion vectors and the residuals that will be used for reconstruction.
@@ -94,6 +92,9 @@ def block_matching(plane, block_width, search_radius):
         
         blocks_plane1 = unfold_window(plane1.unsqueeze(0).unsqueeze(0))   # (1, 1 * ∏(kernel_size), totalNumberOfBlocks). Again, same dimensions. The number of blocks now is different because it uses a larger stride of <block_width>
         blocks_plane1 = blocks_plane1.squeeze(0).permute(1, 0)            # (totalNumberOfBlocks, ∏(kernel_size))
+
+        num_motion_blocks_per_frame = len(blocks_plane1)
+
 
         if DEBUG:
             print(f"Plane shape: {plane.shape}, Blocks Plane0 shape: {blocks_plane0.shape}, Blocks Plane1 shape: {blocks_plane1.shape}")
@@ -112,7 +113,7 @@ def block_matching(plane, block_width, search_radius):
             
             candidate_patches = get_candidate_patches(current_coords, search_radius, block_width, w, h)
             candidate_patches = candidate_patches.to(plane.device)
-            
+
             if DEBUG:
                 print(f"Patch Ids to compare: {candidate_patches}")
             
@@ -136,8 +137,8 @@ def block_matching(plane, block_width, search_radius):
             # Get the residue between the current patch and the best patch in the previous frame and
             # store the motion vector and the residue
             residue = blocks_plane1[patchId] - prev
-            residue = residue
+            
             motion_vectors_patches[idx].append([dx, dy, residue])
 
-            
-    return motion_vectors_patches
+
+    return num_motion_blocks_per_frame, motion_vectors_patches
