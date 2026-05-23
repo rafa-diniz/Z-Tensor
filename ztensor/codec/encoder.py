@@ -35,10 +35,10 @@ def encode_video(planes: List[torch.Tensor], i_frame_indices: torch.Tensor, comp
 
         plane_tensor  = padding.pad_plane(plane_tensor, block_width)
 
-        num_motion_blocks_per_frame, serialized_motion_blocks = block_matching.block_matching(plane_tensor, block_width, search_window)
+        motion_vectors, block_residuals = block_matching.block_matching(plane_tensor, block_width, search_window)
 
-        payload = serialization.serialize_payload(num_motion_blocks_per_frame,
-                                                  serialized_motion_blocks, 
+        payload = serialization.serialize_payload(motion_vectors, 
+                                                  block_residuals, 
                                                   plane_tensor, 
                                                   i_frame_indices, 
                                                   original_plane_h, 
