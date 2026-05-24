@@ -11,7 +11,7 @@ from ztensor.effects import quantization
 
 def encode_video(planes: List[torch.Tensor], i_frame_indices: torch.Tensor, compression_factor: int, num_threads: int, pixel_format: str, quantization_parameter: int) -> bytes:
 
-    serialized_video = bytes()
+    serialized_video = []
 
     block_width   = 8
     search_window = 8
@@ -24,7 +24,7 @@ def encode_video(planes: List[torch.Tensor], i_frame_indices: torch.Tensor, comp
                                              block_width, 
                                              num_frames,
                                              num_planes)
-    serialized_video += header
+    serialized_video.append(header)
 
     for plane_tensor in planes:
         # Cast to int16 to calculate P-frames. Since the P-frames are only integer values, int16 will do just fine.
@@ -37,6 +37,12 @@ def encode_video(planes: List[torch.Tensor], i_frame_indices: torch.Tensor, comp
 
         motion_vectors, block_residuals = block_matching.block_matching(plane_tensor, block_width, search_window, i_frame_indices)
 
+        # TODO figure out why this isn't working
+        if False:#quantization_parameter:
+            block_residuals = quantization.quantize(block_residuals, quantization_parameter).to(torch.int8)
+        else:
+            block_residuals = block_residuals.to(torch.uint8)
+
         payload = serialization.serialize_payload(motion_vectors, 
                                                   block_residuals, 
                                                   plane_tensor, 
@@ -47,15 +53,11 @@ def encode_video(planes: List[torch.Tensor], i_frame_indices: torch.Tensor, comp
                                                   padded_plane_w
                                                   )
 
-        serialized_video += payload
-
-        if quantization_parameter :
-            # TODO figure out how to quantize with block-matching.
-            plane_tensor = quantization.quantize(plane_tensor, quantization_parameter).to(torch.int8)
-        else:
-            plane_tensor = plane_tensor.to(torch.uint8)
+        serialized_video.append(payload)
 
 
+
+    serialized_video = b"".join(serialized_video)
     compressed_video = compress_video(serialized_video, compression_factor, num_threads)
     
     return compressed_video

@@ -1,10 +1,10 @@
 import torch
 
 # Converts patchIds into pixel coordinates.
-def patchId2Coords(patchId, block_width, blocks_in_plane_width):
-    return torch.as_tensor([patchId % blocks_in_plane_width * block_width, 
+def patchId2Coords(patchId: torch.Tensor, block_width, blocks_in_plane_width):
+    return torch.stack([patchId % blocks_in_plane_width * block_width, 
                            patchId // blocks_in_plane_width * block_width
-                           ], dtype=torch.int32)
+                           ], dim=-1)
 
 
 # Converts coordinates to patchIds taking into account how many blocks each row in the frame supports. 
@@ -25,39 +25,34 @@ def sad(block_a, block_b):
         _type_: _description_
     """
     scores = (block_a - block_b).abs().sum(dim=-1)
+    
     return scores
 
 
 
-def get_candidate_patches(current_coords, search_radius, block_width, w, h):
+def get_coords_of_candidate_patches(current_coords, search_radius):
     # For each patch, we explore the <block_width> neighborhood and store the patchIds of each neighboring patch.
     # Note that these patchIds refer to the patches with stride 1! Not the ones with stride <block_width>!
     # The idea is to slide the window centered in the current coordinates in all neighboring directions moving 1 pixel at a time,
     # and then store the IDs of these neighboring patches. They will later be compared to the original patch centered in the current
     # coordinates to find the neighboring 8x8 patch that is the most similar to the current one.
-
-    offsets = [ [0, 0] ]
-    for s in ["+", "-"]:
-        for i in range(search_radius+1):
-            if s == "-":
-                i = -i
-            for j in range(search_radius+1):
-                if s == "-":
-                    j = -j
-                if (i != 0) or (j != 0):
-                    offsets.append([i, j])
     
-    offset_coords = current_coords + torch.as_tensor(offsets, device=current_coords.device)
-    mask_negative = torch.any(offset_coords < 0, dim=-1)
-    mask_within_max_width  = offset_coords[..., 0] + block_width < w
-    mask_within_max_height = offset_coords[..., 1] + block_width < h
+    offsets = torch.arange(-search_radius, search_radius+1).to(current_coords.device)
+    offsets = torch.cartesian_prod(offsets, offsets) # shape: (number_of_offsets, 2)
+
+    #               (number_of_blocks, 1, 2)      +  (1, number_of_offsets, 2) = (number_of_blocks, 2, number_of_offsets)
+    offset_coords =   current_coords[:, None, :]  +  offsets[None, :, :] 
+
+    return offset_coords
+
+
+def get_invalid_coords(coords, block_width, h, w):
+    invalid_x       = (coords[..., 0] < 0) | (coords[..., 0] + block_width >= w)
+    invalid_y       = (coords[..., 1] < 0) | (coords[..., 1] + block_width >= h)
     
-    offset_coords = offset_coords[~mask_negative & mask_within_max_width & mask_within_max_height]
+    mask_invalid    = invalid_x | invalid_y
 
-    patchIds_compare_to_in_prev_frame = coords2PatchId(offset_coords, 1, w-block_width+1)
-    patchIds_compare_to_in_prev_frame = torch.as_tensor(patchIds_compare_to_in_prev_frame, dtype=torch.int32)
-
-    return patchIds_compare_to_in_prev_frame
+    return mask_invalid
 
 
 def block_matching(plane, block_width, search_radius, i_frame_indices):
@@ -102,59 +97,61 @@ def block_matching(plane, block_width, search_radius, i_frame_indices):
         plane0 = plane[frame_idx-1]
         plane1 = plane[frame_idx]
 
-        blocks_plane0 = unfold_stride_1(plane0.unsqueeze(0).unsqueeze(0)) # (1, 1 * ∏(kernel_size), totalNumberOfBlocks). Since we're dealing with individual planes, C=1. And B = 1 too.
-        blocks_plane0 = blocks_plane0.squeeze(0).permute(1, 0)            # (B, C * ∏(kernel_size), totalNumberOfBlocks) -> (C * ∏(kernel_size), totalNumberOfBlocks) -> (totalNumberOfBlocks, ∏(kernel_size))
+        blocks_plane0 = unfold_stride_1(plane0.unsqueeze(0).unsqueeze(0)) # (1, 1 * ∏(kernel_size), num_blocks_plane0). Since we're dealing with individual planes, C=1. And B = 1 too.
+        blocks_plane0 = blocks_plane0.squeeze(0).permute(1, 0)            # (num_blocks_plane0, ∏(kernel_size))
         
-        blocks_plane1 = unfold_window(plane1.unsqueeze(0).unsqueeze(0))   # (1, 1 * ∏(kernel_size), totalNumberOfBlocks). Again, same dimensions. The number of blocks now is different because it uses a larger stride of <block_width>
-        blocks_plane1 = blocks_plane1.squeeze(0).permute(1, 0)            # (totalNumberOfBlocks, ∏(kernel_size))
+        blocks_plane1 = unfold_window(plane1.unsqueeze(0).unsqueeze(0))   # (1, 1 * ∏(kernel_size), num_blocks_plane1). Again, same dimensions. The number of blocks now is different because it uses a larger stride of <block_width>
+        blocks_plane1 = blocks_plane1.squeeze(0).permute(1, 0)            # (num_blocks_plane1, ∏(kernel_size))
 
         if DEBUG:
             print(f"Plane shape: {plane.shape}, Blocks Plane0 shape: {blocks_plane0.shape}, Blocks Plane1 shape: {blocks_plane1.shape}")
             print(f"Blocks in plane width: {blocks_in_plane_width}, Blocks in plane height: {blocks_in_plane_height}")
         
+        # the coordinates for all block_width * block_width blocks in plane1
+        # shape: (num_blocks_plane1, 2) 
+        coords_of_plane1_patches = patchId2Coords(torch.arange(len(blocks_plane1)), block_width, blocks_in_plane_width).to(device) 
+        
+        # the coordinates of the candidate patches. These are in (x,y)
+        # shape: (num_blocks_plane1, num_candidates, 2)
+        coords_of_candidate_patches = get_coords_of_candidate_patches(coords_of_plane1_patches, search_radius)
 
-        # Loop over every block_width x block_width patch with stride block_width
-        for patchId in range(len(blocks_plane1)):
-            # pixel coordinates are always the TOP LEFT CORNER pixel! It's a simple 2-digit tuple because ince all blocks have width <block_width> 
-            # and also height <block_width>, we can always get the full patch by adding + <block_width> to x and y.
-            current_coords                     = patchId2Coords(patchId, block_width, blocks_in_plane_width).to(device)
-            current_x, current_y               = current_coords
+        # Not all coords of candidate patches are valid. Some can contain coordinates lower than 0,
+        # higher than the image's width, etc. This function gives a mask with the invalid coords.
+        # shape: (num_blocks_plane1, num_candidates)
+        mask_invalid_coords  = get_invalid_coords(coords_of_candidate_patches, block_width, h, w)
 
+        # The patchIds of each candidate patch in plane0's Ids. Notice that these are using plane0's blockIds,
+        # not plane1's!
+        # shape: (num_blocks_plane1, num_candidates)
+        patchIds_of_candidates_in_plane0 = coords2PatchId(coords_of_candidate_patches, 1, w - block_width + 1) 
+        
+        # Turn the patchIds of the invalid patches to 0. This is not sufficient by itself, because these 
+        # invalid patches might still have the best SAD score when using patch0. Later I'll also
+        # turn the SAD scores of these patches to 0 to infinity to force SAD to ignore these patches.
+        patchIds_of_candidates_in_plane0[mask_invalid_coords] = 0
+        
+        # The sad scores for each candidate patch in plane0. 
+        # shape: (num_blocks_plane1, num_candidates)
+        sad_scores_for_candidates_in_plane0 = sad(blocks_plane1[:, None, :], blocks_plane0[patchIds_of_candidates_in_plane0])
 
-            if DEBUG:
-                print(f"Current coords: {current_coords}, Patch: {patchId}")
-            
-            candidate_patches = get_candidate_patches(current_coords, search_radius, block_width, w, h)
-            candidate_patches = candidate_patches.to(device)
+        # Make the scores for the invalid patches into infinity so they don't get accidentaly picked as the 
+        # lowest sad scores
+        sad_scores_for_candidates_in_plane0[mask_invalid_coords] = float('inf')
+        
+        
+        # Get the Id of the patch with lowest sad score
+        # shape: (num_blocks_plane1,)
+        patchIds_with_lowest_sad_in_plane0 = patchIds_of_candidates_in_plane0[torch.arange(len(blocks_plane1)), torch.argmin(sad_scores_for_candidates_in_plane0, dim=-1)]
 
-            if DEBUG:
-                print(f"Patch Ids to compare: {candidate_patches}")
-            
-            sad_scores    = sad(blocks_plane1[patchId], blocks_plane0[candidate_patches])
+        # and convert it to coordinates
+        # shape: (num_blocks_plane1, 2)
+        coords_of_patches_with_lowest_sad = patchId2Coords(patchIds_with_lowest_sad_in_plane0, 1, w-block_width+1).to(device)
 
-            # Get coords of the candidate patch with lowest SAD score, which is the best patch (maybe change variable name to candidate_patches?).
-            best_patchid            = candidate_patches[torch.argmin(sad_scores)] 
-            coords_patch_lowest_sad = patchId2Coords(best_patchid, 1, w-block_width+1).to(device)
+        # The motion vectors for each frame are the coordinates of the patch with lowest SAD score - the coordinates of the patches in plane1
+        motion_vectors[frame_idx]  = coords_of_patches_with_lowest_sad - coords_of_plane1_patches
 
-            # these are the motion vectors that tell us how to get to the candidate patch starting from the current patch.
-            # since the block sizes are all equal, we can use the motion vectors to tell us how to reconstruct the current frame's patch
-            # using just relative motion vectors from the previous frame.
-            dx, dy  = coords_patch_lowest_sad - current_coords
-
-            # prev are the best patch's pixel values in the previous frame
-            prev    = plane0[current_y + dy: current_y + dy + block_width, current_x + dx: current_x + dx + block_width].flatten()
-
-            if DEBUG:
-                print(f"Patch Id lowest SAD: {best_patchid}")
-                print(current_y + dy, current_y + dy + block_width, current_x + dx, current_x + dx + block_width, prev.shape)
-
-            # Get the residue between the current patch and the best patch in the previous frame and
-            # store the motion vector and the residue
-            residue = blocks_plane1[patchId] - prev
-            
-            motion_vectors[frame_idx][patchId] = torch.as_tensor([dx, dy], dtype=torch.int8, device=device)
-            block_residuals[frame_idx][patchId] = residue.to(torch.uint8)
-            
+        # And the residuals are just the blocks in frame1 - the best candidate block in frame0
+        block_residuals[frame_idx] = blocks_plane1 - blocks_plane0[patchIds_with_lowest_sad_in_plane0]
 
     return motion_vectors, block_residuals
 
@@ -162,11 +159,10 @@ def block_matching(plane, block_width, search_radius, i_frame_indices):
 
 def deconstruct_block_matching(planes, i_frame_indices):
     planes_decoded = []
-
     for plane_id in range(len(planes)):
-        frames                      = planes[plane_id]['frames']
-        motion_vectors              = planes[plane_id]['motion_vectors']
-        residual_blocks             = planes[plane_id]['residual_blocks']
+        frames                      = planes[plane_id]['frames'].cuda()
+        motion_vectors              = planes[plane_id]['motion_vectors'].cuda()
+        residual_blocks             = planes[plane_id]['residual_blocks'].cuda()
         original_height             = planes[plane_id]['original_h']
         original_width              = planes[plane_id]['original_w']
         padded_height               = planes[plane_id]['padded_h']
@@ -174,20 +170,44 @@ def deconstruct_block_matching(planes, i_frame_indices):
         block_width                 = planes[plane_id]['block_width']
         num_frames, num_blocks, num_elements_per_block = planes[plane_id]['residual_blocks'].shape
         blocks_in_plane_width  = padded_width // block_width
-
+        
+        
         for frame_idx in range(1, num_frames):
             if frame_idx in i_frame_indices:
-                continue
+                continue    
             
-            for block_id in range(num_blocks):
-                block_coords = patchId2Coords(block_id, block_width, blocks_in_plane_width)
-                
-                current_x, current_y = block_coords
-                dx, dy               = motion_vectors[frame_idx][block_id]
-                residue              = residual_blocks[frame_idx][block_id].reshape(block_width, block_width)
-                frames[frame_idx][current_y : current_y + block_width, current_x : current_x + block_width] = frames[frame_idx-1][current_y + dy : current_y +dy +block_width, current_x + dx : current_x + dx + block_width] + residue
-        
+            # The patch ids for each block
+            # shape: (num_blocks_in_plane1,)
+            patch_ids_for_patches_in_plane1 = torch.arange(num_blocks).cuda()
+
+            # The coordinate version of those patches
+            # shape: (num_blocks_in_plane1, 2)
+            coords_for_patches_in_plane1    = patchId2Coords(patch_ids_for_patches_in_plane1, block_width, blocks_in_plane_width).cuda()
+
+            y_coords_for_patches_in_plane1  = coords_for_patches_in_plane1[..., 1]
+            x_coords_for_patches_in_plane1  = coords_for_patches_in_plane1[..., 0]
+            coords_offsets                  = torch.arange(block_width).cuda()
+
+            # The coordinates of the patches in the height axis
+            # shape: (num_blocks_in_plane1, block_width, 1)
+            y_patches = y_coords_for_patches_in_plane1[:, None, None] + coords_offsets[None, :, None].cuda()
+
+            # The coordinates of the patches in the width axis
+            # shape: (num_blocks_in_plane1, 1, block_width)
+            x_patches = x_coords_for_patches_in_plane1[:, None, None] + coords_offsets[None, None, :].cuda()
+
+            # The motion vectors
+            # shapes: (num_blocks_in_plane1, 1, 1)
+            dy = motion_vectors[frame_idx, :, 1][:, None, None].cuda()
+            dx = motion_vectors[frame_idx, :, 0][:, None, None].cuda()
+            
+            residue = residual_blocks[frame_idx].reshape(num_blocks, block_width, block_width).cuda()
+
+            frames[frame_idx, y_patches, x_patches] = frames[frame_idx-1, y_patches+dy, x_patches+dx] + residue
+
+
         frames = frames[:, : original_height, : original_width]
+        frames = frames.to(torch.uint8)
         planes_decoded.append(frames)
 
     return planes_decoded

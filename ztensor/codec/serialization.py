@@ -3,6 +3,7 @@ import typing
 import zstandard
 import numpy as np
 
+from ztensor.effects import quantization
 
 def serialize_header(pixel_format: str, 
                     quantization_parameter: int,
