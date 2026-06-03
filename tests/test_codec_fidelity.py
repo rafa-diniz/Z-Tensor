@@ -1,4 +1,5 @@
 import os
+import torch
 import numpy as np
 
 from skimage.metrics import structural_similarity as ssim
@@ -16,9 +17,15 @@ def run_fidelity_check(video_path, device, memory_budget, compression_factor, nu
                                                                 )
     
 
+    original_video = original_video.cpu().numpy().astype(np.uint8)
+
+    # Wait until the original video goes to the CPU.
+    with torch.cuda.device(device):
+        torch.cuda.synchronize()
+        torch.cuda.empty_cache()
+
     decoded_video = pipeline.decode_pipeline(encoded_video, device)
     
-    original_video = original_video.cpu().numpy().astype(np.uint8)
     decoded_video  = decoded_video.cpu().numpy().astype(np.uint8)
 
     mse = np.mean((original_video.astype(np.float64) - decoded_video.astype(np.float64)) ** 2)
@@ -31,7 +38,7 @@ def run_fidelity_check(video_path, device, memory_budget, compression_factor, nu
 
     avg_ssim = np.mean(ssim_values)
 
-    return avg_psnr, avg_ssim, original_video.nbytes / (1024 * 1024), len(encoded_video) / (1024 * 1024)
+    return avg_psnr, avg_ssim, os.path.getsize(video_path) / (1024 * 1024), len(encoded_video) / (1024 * 1024)
 
 
 def test_codec_fidelity(args):
@@ -59,6 +66,6 @@ def test_codec_fidelity(args):
                                                                                )
 
         if np.isinf(avg_psnr):
-            print(f"{os.path.basename(video_path):<30} | {'Lossless':<20}  | {avg_ssim:<20.2f} | {size_orig_mb:<20.2f} | {size_ztensor_mb:<20.2f}")
+            print(f"{os.path.basename(video_path):<30} | {'Lossless':<20}  | {avg_ssim:<20.2f} | {size_orig_mb:<20.1f} | {size_ztensor_mb:<20.1f}")
         else:
-            print(f"{os.path.basename(video_path):<30} | {avg_psnr:<20.2f} | {avg_ssim:<20.2f} | {size_orig_mb:<20.2f} | {size_ztensor_mb:<20.2f}")
+            print(f"{os.path.basename(video_path):<30} | {avg_psnr:<20.2f} | {avg_ssim:<20.2f} | {size_orig_mb:<20.1f} | {size_ztensor_mb:<20.1f}")

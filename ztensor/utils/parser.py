@@ -28,7 +28,7 @@ def make_parser() -> ArgumentParser:
     parser.add_argument('-t', '--threads', type=int, default=4,
                         help="The number of threads zstandard is allowed to use for compression. Default = 4.")
     
-    parser.add_argument('-c', '--chroma', type=str, default='half-width', choices=['full', 'half-width', 'quarter'], help="The level for chroma subsampling. \'full\' is 4:4:4/No chroma subsampling, \'half-width\' is 4:2:2, \'quarter\' is 4:2:0. Default = half-width")
+    parser.add_argument('-c', '--chroma', type=str, default='quarter', choices=['full', 'half-width', 'quarter'], help="The level for chroma subsampling. \'full\' is 4:4:4/No chroma subsampling, \'half-width\' is 4:2:2, \'quarter\' is 4:2:0. Default = half-width")
 
     parser.add_argument('-qp', '--quantization-parameter', type=int, default=0, help="Quantizes the residuals to improve compression ratios by forcing multiple residuals into the same bins. 0 = No Quantization (lossless residuals), 1 = Linear (lossy). Default = 0")
 
