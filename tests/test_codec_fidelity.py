@@ -25,19 +25,23 @@ def run_fidelity_check(video_path, device, memory_budget, compression_factor, nu
             torch.cuda.synchronize()
             torch.cuda.empty_cache()
 
-    decoded_video = pipeline.decode_pipeline(encoded_video, device)
-    
+    decoded_video  = pipeline.decode_pipeline(encoded_video, device)
     decoded_video  = decoded_video.cpu().numpy().astype(np.uint8)
 
-    mse = np.mean((original_video.astype(np.float64) - decoded_video.astype(np.float64)) ** 2)
-    avg_psnr = float('inf') if mse == 0 else 10 * np.log10(255**2 / mse)
+    # Check if the decoded frames are pixel-exact matches to the original video
+    if np.array_equal(decoded_video, original_video): 
+        avg_psnr = "Lossless"
+        avg_ssim = "Lossless"
+    else:
+        mse      = np.mean((original_video.astype(np.float64) - decoded_video.astype(np.float64)) ** 2)
+        avg_psnr = float('inf') if mse == 0 else 10 * np.log10(255**2 / mse)
 
-    ssim_values = []
-    for i in range(len(original_video)):
-        s = ssim(original_video[i], decoded_video[i], channel_axis=2, data_range=255)
-        ssim_values.append(s)
+        ssim_values = []
+        for i in range(len(original_video)):
+            s = ssim(original_video[i], decoded_video[i], channel_axis=2, data_range=255)
+            ssim_values.append(s)
 
-    avg_ssim = np.mean(ssim_values)
+        avg_ssim = np.mean(ssim_values)
 
     return avg_psnr, avg_ssim, os.path.getsize(video_path) / (1024 * 1024), len(encoded_video) / (1024 * 1024)
 
@@ -66,7 +70,7 @@ def test_codec_fidelity(args):
                                                                                args.quantization_parameter
                                                                                )
 
-        if np.isinf(avg_psnr):
-            print(f"{os.path.basename(video_path):<30} | {'Lossless':<20}  | {avg_ssim:<20.2f} | {size_orig_mb:<20.1f} | {size_ztensor_mb:<20.1f}")
+        if avg_psnr == "Lossless" and avg_ssim == "Lossless":
+            print(f"{os.path.basename(video_path):<30} | {'Lossless':<20} | {'Lossless':<20}  | {size_orig_mb:<20.1f} | {size_ztensor_mb:<20.1f}")
         else:
             print(f"{os.path.basename(video_path):<30} | {avg_psnr:<20.2f} | {avg_ssim:<20.2f} | {size_orig_mb:<20.1f} | {size_ztensor_mb:<20.1f}")
