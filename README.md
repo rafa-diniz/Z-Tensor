@@ -2,34 +2,45 @@
 
 [![Python](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/)
 [![PyTorch](https://img.shields.io/badge/PyTorch-GPU%20accelerated-orange.svg)](https://pytorch.org/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![License: GPL3](https://img.shields.io/badge/License-GPLv3-green.svg)](LICENSE)
 
 
-### My Custom-Made Hardware-Accelerated Video Codec built from scratch in PyTorch. No FFmpeg. No libav. No shortcuts.
+### Experimental video codec built from scratch in Python and PyTorch
 
-Z-Tensor is an experimental codec I built from scratch. Every step runs as a native tensor operation, and the whole pipeline can run on CPU or GPU. Lossless and lossy modes are both supported. It features block matching motion estimation, a custom scene-aware I-frame selection logic, chroma subsampling and Zstandard compression.
 
-The name comes from its two main components: **Z** from Zstandard, which is used as the compressor, while **Tensor** comes from PyTorch Tensors because every pixel-level operation runs as a tensor op, keeping the heavy lifting on the GPU and out of Python loops.
+Z-Tensor is an experimental video codec implemented manually in Python and PyTorch. Every core pixel-level operation runs as a native tensor operation, and the heavy parts of the pipeline can run on CPU or GPU. Lossless and lossy modes are both supported. It features block matching motion estimation, a custom scene-aware I-frame selection, chroma subsampling and Zstandard compression.
 
----
-
-## Why build a codec from scratch?
-
-Because I like building efficient systems and optimizing my own code to run faster. I also genuinely like working with images, video and compression. Building a video codec is a project where all of these topics intersect, and I wanted to see if I could do it.
+The name comes from its two main components: **Z** from Zstandard, which is used as the compressor, while **Tensor** comes from PyTorch Tensors because the core pixel-level operations run as tensor ops, keeping the heavy lifting on the GPU.
 
 ---
 
-## Okay, but why PyTorch?
+## Highlights
 
-PyTorch turned out to be a surprisingly good library for this project. Tensor ops can run on the GPU, which makes writing GPU-accelerated code pretty easy as long as you can do everything in tensors. Also, some of the features I implemented like chroma subsampling, block matching and keyframe detection benefit a lot from PyTorch's functions. For example: `F.conv2d` can be used as a convolution operator for running batched edge detection, `nn.Unfold` can be used to generate frame-wise sliding windows of variable sizes for block matching, and `AvgPool2d` can be used for chroma subsampling, since chroma subsampling is literally just an average pooling! 
+* Block matching motion estimation implemented with PyTorch tensor operations
+* Motion vectors and residual coding for P-frame reconstruction
+* Scene-aware I-frame selection using histogram deltas and edge variance
+* Chroma subsampling modes: 4:4:4, 4:2:2 and 4:2:0
+* Lossless and lossy modes supported
+* Custom ```.ztensor``` serialization format with Zstandard compression backend
+* CPU/GPU execution
+* PSNR/SSIM evaluation on benchmark videos
 
-This showed me an alternative side of PyTorch that very few people consider when they're using it. Also, if I ever want to use AI for Neural Compression for example, Torch is already installed and I can easily integrate these AI models with the existing code.
+---
 
---- 
 
-## Disclaimer
+## Why this project exists
 
-This is an experimental codec, not a production replacement for H.264, H.265 or AV1!
+I built Z-Tensor to understand how video codecs work internally and to test how far PyTorch tensor operations can be pushed outside the usual Machine Learning workflow.
+
+The project combines several areas I enjoy such as image/video processing, compression, GPU-accelerated programming, binary serialization and performance-oriented Python.
+
+---
+
+## Project scope
+
+Z-Tensor is an experimental codec and not a replacement for production codecs such as H.264, HEVC, or AV1.
+
+The goal here is to make a codec that is understandable, transparent and implemented from the ground up, while exploring how far PyTorch tensor ops can be pushed in a custom video-compression pipeline.
 
 ---
 
@@ -61,15 +72,19 @@ Tested on standard CIF/QCIF benchmark videos:
 | bus_cif.avi | 40.89 | 1.00 | 43.5 MB | 12.5 MB | **3.5×** |
 | carphone_qcif.avi | 40.62 | 0.99 | 27.7 MB | 6.9 MB | **4.0×** |
 
+**Quality reference:** PSNR above 40 dB and SSIM near 1.0 indicate very high fidelity reconstruction.
+
+
 ### Lossless (`--chroma full -qp 0`)
+
+Lossless mode is verified by checking whether the decoded frames are pixel-exact matches to the original video.
 
 | Video | PSNR (dB) | SSIM | Original | Z-Tensor | Compression |
 |---|---|---|---|---|---|
-| bowing_cif.avi | Lossless | 1.00 | 87.0 MB | 39.8 MB | **2.2×** |
-| bus_cif.avi | Lossless | 1.00 | 43.5 MB | 29.8 MB | **1.5×** |
-| carphone_qcif.avi | Lossless | 1.00 | 27.7 MB | 16.0 MB | **1.7×** |
+| bowing_cif.avi | Lossless | Lossless | 87.0 MB | 39.8 MB | **2.2×** |
+| bus_cif.avi | Lossless | Lossless | 43.5 MB | 29.8 MB | **1.5×** |
+| carphone_qcif.avi | Lossless | Lossless | 27.7 MB | 16.0 MB | **1.7×** |
 
-**Quality reference:** PSNR ≥ 40 dB / SSIM ≥ 0.95 is considered visually indistinguishable from the original.
 
 ---
 
@@ -115,7 +130,7 @@ Raw video (BGR)
   .ztensor file
 ```
 
-The decoder runs this in reverse: Zstandard decompresses the .ztensor file → serialized video is parsed to get the header info and the video content → reconstruct frames by undoing block matching → chroma upsampling in case the encoder used chroma subsampling → save video as playable .avi file.
+The decoder runs this in reverse: Zstandard decompresses the .ztensor file, the serialized payload is parsed to recover the header and encoded frame data, P-frames are reconstructed from motion vectors and residuals, chroma planes are upsampled when needed, and the decoded frames are saved as a playable video file.
 
 ---
 
@@ -127,7 +142,7 @@ Most pixels in a video tend to not change much between frames. For example: a ca
 
 The most natural approach to address this is called "frame differencing". Frame differencing subtracts the previous frame from the current one and stores only the differences, which are called "residuals". This is where most compression gains come from. If most residuals are filled with zeros, the compressor notices all these repeated zeros in the residuals and compresses them, shrinking the file size. Frame differencing generally works well for static scenes, but it completely ignores motion. If a car driving fast moves 20 pixels to the right, frame differencing sees the entire car-shaped region as "changed" and stores all of it, even though nothing about the car itself actually changed.
 
-Block matching is much smarter. It divides the frame into blocks, and for each block, the encoder searches in the previous frame for the most similar block within a search area. The most similar block will hopefully yield lots of zeros for the compressor, which noticeably improves compression. In my tests, block matching compressed 10-20% better than frame differencing.
+Block matching handles this case much better. It divides the frame into blocks, and for each block, the encoder searches in the previous frame for the most similar block within a search area. A good match usually yields smaller residuals, often with many repeated or near-zero values, which noticeably improves compression. In my tests, block matching compressed 10-20% better than frame differencing.
 
 Instead of storing residuals for the entire frame, block matching stores the residuals for each block and a motion vector that tells the decoder where to look in the previous frame to reconstruct the current block. This way, a car that moved 20 pixels to the right gets a motion vector of (20, 0) and residuals that are nearly all zeros, which compresses better.
 
@@ -167,7 +182,7 @@ scores = (blocks_plane1[:, None, :] - blocks_plane0[candidate_ids]).abs().sum(di
 
 ### Scene-Aware I-frame Selection
 
-A frame that is represented by residuals is called a "P-frame". While P-frames are easy to compress because they tend to be filled with zeros, they can also be tricky to deal with, since they entirely depend on the previous frame to be reconstructed. This can cause problems in lossy compression, since lossy compression means that the residuals are not exactly frame-perfect, and that the reconstructed picture is slightly different from the original. Because lossy compression discards information, the more consecutive P-frames are used to reconstruct the image, the more this error between the reconstructed video and the original video accumulates, resulting in a noticeable degradation in quality after enough frames have passed. This is one of the reasons why codecs periodically insert independent frames that are copied straight from the source video (called I-frames) to "reset" this error accumulation.
+In Z-Tensor, frames represented through motion vectors and residuals are treated as P-frames. P-frames are easy to compress when the motion estimation is good, because the residuals tend to contain many repeated or near-zero values, but they can also be tricky to deal with because they depend on a reference frame to be reconstructed. This can cause problems in lossy compression, since lossy compression means that the residuals are not exactly frame-perfect, and that the reconstructed picture is slightly different from the original. Because lossy compression discards information, the more consecutive P-frames are used to reconstruct the image, the more this error between the reconstructed video and the original video accumulates, resulting in a noticeable degradation in quality after enough frames have passed. This is one of the reasons why codecs periodically insert independent frames that are encoded independently from the reference frames (called I-frames) to "reset" this error accumulation.
 
 
 The simplest approach is to insert an I-frame every N frames on a fixed schedule. However, this can waste bytes. If an I-frame lands in the middle of a static scene, it will mostly encode redundant information the previous frame already had, wasting bytes. Or even worse: if the fixed schedule places an I-frame just before an abrupt cut, this means the scene right after the cut will have to be reconstructed by using a completely different scene as reference, producing large residuals that, when quantized, can lead to noticeable quality degradation.
@@ -212,11 +227,11 @@ near scene cut)        │      near scene cut)
 
 ### Chroma Subsampling
 
-Human eyes are much more sensitive to changes in brightness than to changes in color. Chroma subsampling is a pretty interesting technique that works in two steps: first it converts an RGB image into a YUV image, where Y is the brightness component and U and V are the two chromatic components that carry color information. Then, it takes advantage of how human eyes work and lowers the resolution of the U and V channels to save on disk space. This is naturally a lossy operation, but in practice it loses so little detail that it is nearly unnoticeable to our eyes.
+Human eyes are much more sensitive to changes in brightness than to changes in color. Chroma subsampling is a pretty interesting technique that works in two steps: first it converts a BGR image into a YUV image, where Y is the brightness component and U and V are the two chromatic components that carry color information. Then, it takes advantage of how human eyes work and lowers the resolution of the U and V channels to save on disk space. This is naturally a lossy operation, but in practice it loses so little detail that it is nearly unnoticeable to our eyes.
 
 There are different ways to implement this drop in resolution, with the most common approaches being called 4:2:2 (also called half-width) and 4:2:0 (also called quarter). 4:2:2 halves the resolution on the horizontal axis, while keeping the Y resolution the same. Meanwhile, 4:2:0 halves the resolution of both horizontal and vertical axes, making the resolution of the U and V channels a quarter of the original.
 
-Since chroma subsampling is literally just spatial average pooling on the U and V planes, `AvgPool2d` can do it natively on the GPU:
+In this implementation, chroma subsampling is represented as average pooling over the U and V planes. `AvgPool2d` can do it natively on the GPU:
 
 ```python
 # BGR to YUV color space conversion
@@ -228,12 +243,12 @@ v = 128 + (0.877 * (r - y))
 pool2d = torch.nn.AvgPool2d(kernel_size=(1, 2), stride=(1, 2))
 uv_subsampled = pool2d(uv)
 
-# 4:2:0: halve U and V in both X and Y axis
+# 4:2:0: halve U and V in both the X and Y axes
 pool2d = torch.nn.AvgPool2d(kernel_size=2, stride=2)
 uv_subsampled = pool2d(uv)
 ```
 
-The decoder then upsamples the U and V planes before converting to RGB.
+The decoder then upsamples the U and V planes before converting to BGR.
 
 ---
 
@@ -244,7 +259,7 @@ The `.ztensor` format is a custom file format: It has a header that stores the c
 ```
 ┌──────────────────────────────────────────────────────┐
 │  HEADER                                              │
-│  pixel_format   (4 bytes, ASCII: RGB3/I422/I420)     │
+│  pixel_format   (4 bytes, ASCII: BGR3/I422/I420)     │
 │  quantization   (1 byte,  uint8)                     │
 │  num_i_frames   (4 bytes, uint32)                    │
 │  i_frame_idxs   (num_i_frames × 4 bytes, uint32[])   │
@@ -360,6 +375,6 @@ python main.py --test --chroma full -qp 0
 
 ## What's next
 
-- **Neural Compression:** Z-Tensor currently stores I-frames as raw pixels, but it is possible to compress I-frames with a neural network and store only their features, which take up much less disk space. Then, at decode time, we take those features and reconstruct the I-frames using the network. From there on, the pipeline works as usual, using the I-frames as reference for frame reconstruction.
-- **Discrete Cosine Transforms:** A DCT transforms the residuals into the frequency domain before quantization, the way JPEG and real-world video codecs do. This would let the quantizer be smarter about which frequency components to discard.
-- **Adaptive Quantization:** instead of applying a fixed quantization step uniformly, Adaptive Quantization varies it spatially based on how human eyes work. JPEG and modern codecs also do this, and it would be neat to have this implemented.
+- **Neural Compression:** Z-Tensor currently stores I-frames as raw pixels, but it should be possible to compress them with a neural encoder instead. The encoder would turn each I-frame into a smaller quantized latent representation, which would be stored in the `.ztensor` file. Then, at decode time, a matching decoder network would reconstruct the I-frame. From there on, the pipeline works as usual, using the reconstructed I-frames as references for P-frame reconstruction.
+- **Discrete Cosine Transforms:** A DCT transforms the residuals into the frequency domain before quantization, similar to the transform-coding stage used by JPEG and many video codecs. This would let the quantizer be smarter about which frequency components to discard.
+- **Adaptive Quantization:** instead of applying a fixed quantization step uniformly, Adaptive Quantization varies it spatially based on how human eyes work. Modern codecs do this, and it would be neat to have this implemented.
