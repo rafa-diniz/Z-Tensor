@@ -1,6 +1,6 @@
 # Z-Tensor
 
-[![Python](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/)
+[![Python](https://img.shields.io/badge/python-3.14-blue.svg)](https://www.python.org/)
 [![PyTorch](https://img.shields.io/badge/PyTorch-GPU%20accelerated-orange.svg)](https://pytorch.org/)
 [![License: GPL3](https://img.shields.io/badge/License-GPLv3-green.svg)](LICENSE)
 
@@ -8,7 +8,7 @@
 ### Experimental video codec built from scratch in Python and PyTorch
 
 
-Z-Tensor is an experimental video codec implemented manually in Python and PyTorch. Every core pixel-level operation runs as a native tensor operation, and the heavy parts of the pipeline can run on CPU or GPU. Lossless and lossy modes are both supported. It features block matching motion estimation, a custom scene-aware I-frame selection, chroma subsampling and Zstandard compression.
+Z-Tensor is an experimental video codec implemented manually in Python and PyTorch using tensors. Every core pixel-level operation runs as a native tensororized operation, and the heavy parts of the pipeline can run on CPU or GPU. Lossless and lossy modes are both supported. It features block matching motion estimation, a custom scene-aware I-frame selection, chroma subsampling and Zstandard compression.
 
 The name comes from its two main components: **Z** from Zstandard, which is used as the compressor, while **Tensor** comes from PyTorch Tensors because the core pixel-level operations run as tensor ops, keeping the heavy lifting on the GPU.
 
@@ -30,17 +30,23 @@ The name comes from its two main components: **Z** from Zstandard, which is used
 
 ## Why this project exists
 
-I built Z-Tensor to understand how video codecs work internally and to test how far PyTorch tensor operations can be pushed outside the usual Machine Learning workflow.
+I built Z-Tensor because I like building systems from scratch to understand how they work internally and to see where the performance bottlenecks are.
 
-The project combines several areas I enjoy such as image/video processing, compression, GPU-accelerated programming, binary serialization and performance-oriented Python.
+I also like exploring new ideas in my projects, and since I enjoy image/video processing, compression, and performance-oriented Python, I wanted to develop something that overlaped with all of these topics.
+
+## Why not C++/CUDA?
+
+That is definitely a future direction I want to take the project in. Rewriting some parts of the code in C++ could improve performance, especially the serialization and deserialization loops, as they are very tied to type conversions and to memory. This is currently left as a future direction, and not a very distant one.
+
+As for CUDA, the reason Z-Tensor is currently implemented in Python + PyTorch is because I don't have experience in writing CUDA code yet, but in the future I would love to re-implement parts of the code in CUDA for extra performance.
 
 ---
 
-## Project scope
+## Disclaimer
 
 Z-Tensor is an experimental codec and not a replacement for production codecs such as H.264, HEVC, or AV1.
 
-The goal here is to make a codec that is understandable, transparent and implemented from the ground up, while exploring how far PyTorch tensor ops can be pushed in a custom video-compression pipeline.
+The goal here is to build a codec from the ground up to understand how it works internally from a systems perspective and to see where the performance bottlenecks are. While I am not trying to beat industry-grade codecs, I offer comparisons to H.264 in the Results table to offer some perspective of how Z-Tensor compares.
 
 ---
 
@@ -62,32 +68,66 @@ These frames come from a video that Z-Tensor encoded at 7.4x compression using B
 
 ## Results
 
-Tested on standard CIF/QCIF benchmark videos:
+Tested on standard CIF/QCIF benchmark videos. Source clips are uncompressed raw video:
 
 ### Balanced Mode (`--chroma quarter -qp 0`)
 
+H.264 videos were encoded using the 'veryslow' preset, matching Z-Tensor's lossless luma + 4:2:0 chroma subsampling for a fair comparison. Full H.264 command: 
+```
+ffmpeg -i source_video.avi -vf format=yuv420p -color_range pc  -c:v libx264 -preset veryslow -qp 0 -pix_fmt yuv420p -an h264_lossy.mkv
+```
+
 **Quality reference:** PSNR above 40 dB and SSIM near 1.0 indicate very high fidelity reconstruction.
 
-| Video | PSNR (dB) | SSIM | Original | Z-Tensor | Compression |
-|---|---|---|---|---|---|
-| bowing_cif.avi | 44.82 | 1.00 | 87.0 MB | 16.2 MB | **5.4×** |
-| bus_cif.avi | 40.89 | 1.00 | 43.5 MB | 12.5 MB | **3.5×** |
-| carphone_qcif.avi | 40.62 | 0.99 | 27.7 MB | 6.9 MB | **4.0×** |
 
+| Video | Original | H.264 | PSNR (dB) | SSIM |
+|---|---|---|---|---|
+| bowing_cif.avi | 87.0 MB | 12.4 MB | 45.55 | 1.00 | 
+| bus_cif.avi | 43.5 MB | 9.9 MB | 44.98 | 1.00 | 
+| carphone_qcif.avi | 27.7 MB | 5.1 MB | 44.95 | 1.00 |
+
+| Video | Original | Z-Tensor | PSNR (dB) | SSIM | % of H.264
+|---|---|---|---|---|---
+| bowing_cif.avi | 87.0 MB | 16.2 MB | 44.82 | 1.00 | 77 %
+| bus_cif.avi | 43.5 MB | 12.5 MB | 40.89 | 1.00 | 79 % 
+| carphone_qcif.avi | 27.7 MB | 6.9 MB | 40.62 | 0.99 | 74 %
+
+
+Note: % of H.264 = Z-Tensor's compression ratio as a fraction of H.264's; 100% would mean matching it.
 
 
 ### Lossless (`--chroma full -qp 0`)
 
 Lossless mode is verified by checking whether the decoded frames are pixel-exact matches to the original video.
 
-| Video | PSNR (dB) | SSIM | Original | Z-Tensor | Compression |
-|---|---|---|---|---|---|
-| bowing_cif.avi | Lossless | Lossless | 87.0 MB | 39.8 MB | **2.2×** |
-| bus_cif.avi | Lossless | Lossless | 43.5 MB | 29.8 MB | **1.5×** |
-| carphone_qcif.avi | Lossless | Lossless | 27.7 MB | 16.0 MB | **1.7×** |
+Again, H.264 videos were encoded using the 'veryslow' preset and matching Z-Tensor's config. Full H.264 command: 
+```
+ffmpeg -i source_video.avi -c:v libx264rgb -preset veryslow -qp 0 -pix_fmt rgb24 -an h264_lossless.mkv
+```
 
+| Video | Original | H.264 | PSNR (dB) | SSIM |
+|---|---|---|---|---|
+| bowing_cif.avi | 87.0 MB | 30.1 MB | Lossless | Lossless | 
+| bus_cif.avi | 43.5 MB | 23.7 MB | Lossless | Lossless | 
+| carphone_qcif.avi | 27.7 MB | 12.4 MB | Lossless | Lossless |
 
----
+| Video | Original | Z-Tensor | PSNR (dB) | SSIM | % of H.264
+|---|---|---|---|---|---
+| bowing_cif.avi | 87.0 MB | 39.8 MB | Lossless | Lossless | 76 %
+| bus_cif.avi | 43.5 MB | 29.8 MB | Lossless | Lossless | 80 % 
+| carphone_qcif.avi | 27.7 MB | 16.0 MB | Lossless | Lossless | 78 %
+
+Note: % of H.264 = Z-Tensor's compression ratio as a fraction of H.264's; 100% would mean Z-Tensor matches H.264.
+
+## Z-Tensor compared to H.264
+
+Z-Tensor reaches around 70-80% of H.264's performance because H.264 has some components that Z-Tensor doesn't:
+
+- H.264 uses a DCT to discard high-frequency details that are largely unnoticeable to our eyes. Because this packs the residuals into fewer values, compression can be improved by a noticeable margin. This one is on the roadmap and should be added in future versions.
+- CABAC is H.264's entropy coder that was built from the ground up to be a compressor for video, and it makes a huge difference. Back when H.264 launched, CABAC was one of its main highlighted features. Z-Tensor uses Zstandard, which is a great compression tool, but it was built to be a general-purpose compressor, while CABAC was built specifically for video, which widens the gap in H.264's favor. 
+- H.264 supports B-frames, meaning that reference frames can come from past or future frames. This means H.264's residuals have more options of what reference frame to use, which can help block matching find more similar blocks and also improve PSNR/SSIM as error accumulation in lossy encoding is mitigated a bit.
+
+I suspect DCT and CABAC are the two main drivers of H.264's performance, and it will be interesting to see how Z-Tensor evolves and closes the gap as more features are added.
 
 ## How the encode pipeline works
 
@@ -376,6 +416,6 @@ python main.py --test --chroma full -qp 0
 
 ## What's next
 
+- **C++:** rewriting the serialization and deserialization code in C++ might offer some performance gains, as those parts are heavily tied to memory and type conversions. Avoiding Python for those parts specifically might yield faster encode/decode times.
+- **Discrete Cosine Transforms:** A DCT transforms the residuals into the frequency domain before quantization, similar to the transform-coding stage used by JPEG and many video codecs. This would let the quantizer be smarter about which frequency components to discard, further improving compression ratios for Z-Tensor.
 - **Neural Compression:** Z-Tensor currently stores I-frames as raw pixels, but it should be possible to compress them with a neural encoder instead. The encoder would turn each I-frame into a smaller quantized latent representation, which would be stored in the `.ztensor` file. Then, at decode time, a matching decoder network would reconstruct the I-frame. From there on, the pipeline works as usual, using the reconstructed I-frames as references for P-frame reconstruction.
-- **Discrete Cosine Transforms:** A DCT transforms the residuals into the frequency domain before quantization, similar to the transform-coding stage used by JPEG and many video codecs. This would let the quantizer be smarter about which frequency components to discard.
-- **Adaptive Quantization:** instead of applying a fixed quantization step uniformly, Adaptive Quantization varies it spatially based on how human eyes work. Modern codecs do this, and it would be neat to have this implemented.
