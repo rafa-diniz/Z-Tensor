@@ -1,8 +1,6 @@
 import torch
 import zstandard
 
-import numpy as np
-
 from typing import List
 
 from ztensor.codec import block_matching, padding, serialization
@@ -15,10 +13,11 @@ def encode_video(planes: List[torch.Tensor],
                  num_threads: int, 
                  pixel_format: str, 
                  quantization_parameter: int,
-                 block_width: int,
+                 block_size: int,
                  search_window: int
                  ) -> bytes:
 
+    compressor       = zstandard.ZstdCompressor(level=compression_factor, threads=num_threads)
     serialized_video = []
 
     num_planes = len(planes)
@@ -26,7 +25,7 @@ def encode_video(planes: List[torch.Tensor],
     header     = serialization.serialize_header(pixel_format, 
                                                 quantization_parameter, 
                                                 i_frame_indices, 
-                                                block_width, 
+                                                block_size, 
                                                 num_frames,
                                                 num_planes)
     serialized_video.append(header)
@@ -35,11 +34,10 @@ def encode_video(planes: List[torch.Tensor],
         plane_tensor  = plane_tensor.to(torch.int16)
 
         _, original_plane_h, original_plane_w = plane_tensor.shape
-        plane_tensor                          = padding.pad_plane(plane_tensor, block_width)
+        plane_tensor                          = padding.pad_plane(plane_tensor, block_size)
         _, padded_plane_h, padded_plane_w     = plane_tensor.shape
 
-
-        motion_vectors, block_residuals = block_matching.block_matching(plane_tensor, block_width, search_window, i_frame_indices)
+        motion_vectors, block_residuals = block_matching.block_matching(plane_tensor, block_size, search_window, i_frame_indices)
 
         if quantization_parameter:
             block_residuals = quantization.quantize(block_residuals, quantization_parameter).to(torch.int8)
@@ -61,14 +59,13 @@ def encode_video(planes: List[torch.Tensor],
 
 
     serialized_video = b"".join(serialized_video)
-    compressed_video = compress_video(serialized_video, compression_factor, num_threads)
-    
+    compressed_video = compress_video(compressor, serialized_video)
+
     return compressed_video
 
 
-def compress_video(video_bytes: bytes, compression_factor: int, num_threads:int) -> bytes:
+def compress_video(compressor: zstandard.ZstdCompressor, video_bytes: bytes) -> bytes:
     # The compression step has to run on CPU.
-    compressor             = zstandard.ZstdCompressor(level=compression_factor, threads=num_threads)
     video_bytes_compressed = compressor.compress(video_bytes)
 
     return video_bytes_compressed

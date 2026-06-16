@@ -1,22 +1,22 @@
 import torch
 
 
-def pad_plane(plane: torch.Tensor, block_width: int) -> torch.Tensor:
+def pad_plane(plane: torch.Tensor, block_size: int) -> torch.Tensor:
     """Pads the current plane so it is perfectly covered by 
-    block_width x block_width blocks. Dimensions that are already
-    perfectly divisible by block_width are ignored
+    block_size x block_size blocks. Dimensions that are already
+    perfectly divisible by block_size are ignored
 
     Args:
         plane (torch.Tensor): A (T, H, W) plane
-        block_width (int): The block's width. Since it's a perfect square, the height is the same as the width
+        block_size (int): The block's width. Since it's a perfect square, the height is the same as the width
 
     Returns:
         torch.Tensor: The padded plane
     """
     _, h, w = plane.shape
 
-    pad_h = (block_width - h % block_width) % block_width
-    pad_w = (block_width - w % block_width) % block_width
+    pad_h = (block_size - h % block_size) % block_size
+    pad_w = (block_size - w % block_size) % block_size
 
     # Pad only the right and the bottom of the plane.
     # This makes the cropping easier when decoding. 
