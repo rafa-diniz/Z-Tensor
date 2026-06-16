@@ -10,7 +10,7 @@ from ztensor.effects import quantization
 def serialize_header(pixel_format: str, 
                     quantization_parameter: int,
                     i_frame_indices: torch.Tensor,
-                    block_width: int,
+                    block_size: int,
                     num_frames: int,
                     num_planes: int
                      ) -> bytes:
@@ -20,7 +20,7 @@ def serialize_header(pixel_format: str,
         pixel_format (str): The pixel format. Either RGB3, I422 or I420
         quantization_parameter (int): The parameter that stores which quantization option was used for the video
         i_frame_indices (torch.Tensor): The indices of the i_frames
-        block_width (int): The with of the motion block. They're square, so no need to pass the height as it is the same as the width. 
+        block_size (int): The with of the motion block. They're square, so no need to pass the height as it is the same as the width. 
         num_frames (int): The number of frames in the video
         num_planes (int): The number of planes in the video
 
@@ -33,7 +33,7 @@ def serialize_header(pixel_format: str,
     header += quantization_parameter.to_bytes(1, signed=False)            # uint8  value for the quantization parameter. 1 = Linear (less aggresive)
     header += len(i_frame_indices).to_bytes(4, signed=False)              # uint32 the number of i-frames in the video
     header += i_frame_indices.cpu().numpy().astype(np.uint32).tobytes()   # uint32 indices of the i-frames
-    header += block_width.to_bytes(4, signed=False)                       # uint32  the size of the motion blocks
+    header += block_size.to_bytes(4, signed=False)                       # uint32  the size of the motion blocks
     
     header += num_planes.to_bytes(4,  signed=False)                       # uint32 the number of planes in the video.
     header += num_frames.to_bytes(4,  signed=False)                       # uint32 the number of frames
@@ -54,7 +54,7 @@ def serialize_payload(motion_vectors: torch.Tensor,
 
     Args:
         motion_vectors (torch.Tensor): The tensor storing the motion vectors for each block. Must be shape (T, L, 2), where L is the number of blocks in each frame
-        block_residuals (torch.Tensor): The tensor storing the residuals for each block. Must be shape (T, L, block_width * block_width), where L is the number of blocks in each frame
+        block_residuals (torch.Tensor): The tensor storing the residuals for each block. Must be shape (T, L, block_size * block_size), where L is the number of blocks in each frame
         plane (torch.Tensor): The unprocessed frame. Will be used to store the i-frames as themselves instead of processed blocks.
         i_frame_indices (torch.Tensor): The indices of the i-frames
         original_plane_h (int): The original height of the plane.
@@ -154,11 +154,10 @@ def deserialize_payload(compressed_bytes: bytes, device: torch.device) -> Tuple[
     num_i_frames  = int.from_bytes(decompressed_bytes[current_byte : current_byte+4], signed=False)
     current_byte += 4
 
-    i_frame_indices = np.frombuffer(decompressed_bytes[current_byte : current_byte + (num_i_frames*4)], dtype=np.uint32).copy() # we create a copy because torch asks for a writeable copy of the bytearray, not a read-only memory view of it.
-    i_frame_indices = torch.as_tensor(i_frame_indices, dtype=torch.uint32, device=device)
+    i_frame_set     = set(np.frombuffer(decompressed_bytes[current_byte : current_byte + (num_i_frames*4)], dtype=np.uint32).tolist())
     current_byte   += num_i_frames*4
 
-    block_width   = int.from_bytes(decompressed_bytes[current_byte : current_byte+4], signed=False)
+    block_size   = int.from_bytes(decompressed_bytes[current_byte : current_byte+4], signed=False)
     current_byte += 4
 
     num_planes    = int.from_bytes(decompressed_bytes[current_byte : current_byte+4], signed=False)
@@ -182,7 +181,7 @@ def deserialize_payload(compressed_bytes: bytes, device: torch.device) -> Tuple[
         num_motion_blocks_per_frame = int.from_bytes(decompressed_bytes[current_byte : current_byte+4], signed=False)
         current_byte  += 4
 
-        num_elements_per_motion_block = block_width * block_width
+        num_elements_per_motion_block = block_size * block_size
 
         bytes_per_frame        = padded_plane_h * padded_plane_w * num_bytes_per_pixel
         bytes_per_motion_block = num_elements_per_motion_block * 1 # 1 because 
@@ -191,9 +190,7 @@ def deserialize_payload(compressed_bytes: bytes, device: torch.device) -> Tuple[
         residual_blocks = torch.zeros((num_frames, num_motion_blocks_per_frame, num_elements_per_motion_block), dtype=datatype_residues_torch)
         motion_vectors  = torch.zeros((num_frames, num_motion_blocks_per_frame, 2),                             dtype=torch.int8)
 
-        i_frame_set = set(i_frame_indices.cpu().tolist())
         for frame_idx in range(num_frames):
-
             if frame_idx in i_frame_set:
                 reconstructed_i_frame = np.frombuffer(decompressed_bytes[current_byte : current_byte + bytes_per_frame], dtype=np.uint8).copy().reshape((padded_plane_h, padded_plane_w))
                 reconstructed_i_frame = torch.as_tensor(reconstructed_i_frame, device=frames.device)
@@ -211,7 +208,6 @@ def deserialize_payload(compressed_bytes: bytes, device: torch.device) -> Tuple[
                         dy            = int.from_bytes(decompressed_bytes[current_byte : current_byte + 1], signed=True)
                         current_byte += 1
 
-                        
                         residue       = np.frombuffer(decompressed_bytes[current_byte : current_byte + bytes_per_motion_block], dtype=datatype_residues_np).copy()
                         current_byte += bytes_per_motion_block
 
@@ -237,7 +233,7 @@ def deserialize_payload(compressed_bytes: bytes, device: torch.device) -> Tuple[
             'original_w': original_plane_w,
             'padded_h': padded_plane_h,
             'padded_w': padded_plane_w,
-            'block_width': block_width
+            'block_size': block_size
         })
     
     return all_planes_data, i_frame_set, pixel_format
