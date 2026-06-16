@@ -300,7 +300,7 @@ It's a small detail in isolation, but exactly the kind of thing that matters whe
 ## Installation
 
 ```bash
-git clone https://github.com/RafaelAmauri/Z-Tensor.git
+git clone https://github.com/rafa-diniz/Z-Tensor.git
 cd Z-Tensor
 pip install -r requirements.txt
 ```
