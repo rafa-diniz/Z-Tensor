@@ -117,7 +117,7 @@ Z-Tensor reaches around 76-80% of H.264's compression ratio because H.264 has so
 
 I suspect DCT and CABAC are the two main drivers of H.264's performance, and it will be interesting to see how Z-Tensor evolves and closes the gap as more features are added.
 
-As for quality, Z-Tensor achieves broadly comparable visual metrics to H.264 on these samples, with one strong PSNR win, one near tie, and one loss. These differences are more bound to specific implementation details such as how the video is stored, how YCbCr values are quantized and stored, and how each codec implemented upsampling.
+As for quality, Z-Tensor achieves broadly comparable visual metrics to H.264 on these samples, with one strong PSNR win, one near tie, and one loss. These differences are more tied to specific implementation details such as how the video itself is stored, how YCbCr values are quantized and stored, and how CbCr upsampling is implemented.
 
 ## How the encode pipeline works
 
