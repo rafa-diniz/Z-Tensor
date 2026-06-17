@@ -54,7 +54,7 @@ The goal here is to build a codec from the ground up to understand how it works 
 
 These frames come from a video that Z-Tensor encoded at 7.4× compression using Balanced mode.
 
-**PSNR:** 43.26 dB &nbsp;|&nbsp; **SSIM:** 0.99 &nbsp;|&nbsp; **Compression:** 7.4× &nbsp;|&nbsp; **File sizes:** 316.4 MB (Raw Video) to 42.9 MB (Z-Tensor)
+**PSNR:** 47.440 dB &nbsp;|&nbsp; **SSIM:** 0.994 &nbsp;|&nbsp; **Compression:** 7.5× &nbsp;|&nbsp; **File sizes:** 316.4 MB (Raw Video) to 42.4 MB (Z-Tensor)
 
 **Original frame**
 
