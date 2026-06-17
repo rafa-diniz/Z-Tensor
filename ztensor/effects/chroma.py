@@ -1,47 +1,81 @@
 import torch
 import typing
 
-def bgr2yuv(bgr_video: torch.Tensor) -> torch.Tensor:
-    '''
-    https://www.computerlanguage.com/results.php?definition=YUV%2FRGB+conversion+formulas
 
-    From RGB to YUV
+def bgr2ycbcr(bgr_video: torch.Tensor, matrix_coefficients: str) -> torch.Tensor:
+    """Convert BGR to YCbCr according to the BT.709-6 or the BT.601-7 standards.
 
-    Y = 0.299R + 0.587G + 0.114B
-    U = 0.492 (B-Y)
-    V = 0.877 (R-Y)
-    '''
+    References: https://www.itu.int/rec/R-REC-BT.709-6-201506-I/en and https://www.itu.int/rec/R-REC-BT.601-7-201103-I/en
 
-    bgr_weights = torch.Tensor([0.114, 0.587, 0.299]).to(bgr_video.device)
-    b = bgr_video[:, :, :, 0].unsqueeze(-1)
-    r = bgr_video[:, :, :, 2].unsqueeze(-1)
 
-    y = torch.sum(bgr_video * bgr_weights, dim=-1).unsqueeze(-1)
-    u = 128 + (0.492 * (b - y)) 
-    v = 128 + (0.877 * (r - y))
+    Args:
+        bgr_video (torch.Tensor): The BGR video. Shape = (frames, height, width, channels)
+        matrix_coefficients (str): The reference standard. Should be either \'BT.709\' or \'BT.601\'
+
+    Returns:
+        torch.Tensor: The YCbCr video. WARNING: Cb and Cr values are shifted to the right so they map to [0,255] instead of [-128, 127]!
+        To get the original values back, simply subtract 128. 
+        Shape = (frames, height, width, channels)
+    """
+    bgr_video = bgr_video.float()
+
+    b_channel = bgr_video[:, :, :, 0].unsqueeze(-1)
+    r_channel = bgr_video[:, :, :, 2].unsqueeze(-1)
+
+    if matrix_coefficients == "bt709":
+        luma_coefficients_bgr = torch.tensor([0.0722, 0.7152, 0.2126], device=bgr_video.device)
+        cb_factor = 1.8556
+        cr_factor = 1.5748
+    elif matrix_coefficients == "bt601":
+        luma_coefficients_bgr = torch.tensor([0.114, 0.587, 0.299], device=bgr_video.device)
+        cb_factor = 1.772
+        cr_factor = 1.402
+    else:
+        raise NotImplementedError(f"Standard {matrix_coefficients} is not implemented!")
+
+    y  = torch.sum(bgr_video * luma_coefficients_bgr, dim=-1).unsqueeze(-1)
+    cb = (b_channel - y) / cb_factor
+    cr = (r_channel - y) / cr_factor
+
+    cb += 128
+    cr += 128
+
+    ycbcr_video = torch.cat([y, cb, cr], dim=-1)
+
+    return ycbcr_video
+
+
+def ycbcr2bgr(yuv_video: torch.Tensor, matrix_coefficients: str) -> torch.Tensor:
+    """
+    Inverse of the conversion above.
+
+    Args:
+        yuv_video (torch.Tensor): _description_
+        matrix_coefficients(str): _description
+
+    Returns:
+        torch.Tensor: _description_
+    """
+    yuv_video = yuv_video.float()
     
-    yuv_video = torch.cat([y, u, v], dim=-1)
+    y  = yuv_video[:, :, :, 0]
+    cb = yuv_video[:, :, :, 1] - 128
+    cr = yuv_video[:, :, :, 2] - 128
 
-    return yuv_video
+    if matrix_coefficients == "bt709":
+        luma_coefficients_bgr = torch.tensor([0.0722, 0.7152, 0.2126], device=yuv_video.device)
+        cb_factor = 1.8556
+        cr_factor = 1.5748
+    elif matrix_coefficients == "bt601":
+        luma_coefficients_bgr = torch.tensor([0.114, 0.587, 0.299], device=yuv_video.device)
+        cb_factor = 1.772
+        cr_factor = 1.402
+    else:
+        raise NotImplementedError(f"Standard {matrix_coefficients} is not implemented!")
 
-
-def yuv2bgr(yuv_video: torch.Tensor) -> torch.Tensor:
-    '''
-    https://www.computerlanguage.com/results.php?definition=YUV%2FRGB+conversion+formulas
-
-    From YUV to RGB
-
-    R = Y + (1.140 * V)
-    G = Y - (0.395 * U) - (0.581 * V)
-    B = Y + (2.032 * U)
-    '''
-    y = yuv_video[:,:,:, 0]
-    u = yuv_video[:,:,:, 1] - 128
-    v = yuv_video[:,:,:, 2] - 128
-
-    r = y + (1.140 * v)
-    g = y - (0.395 * u) - (0.581 * v)
-    b = y + (2.032 * u)
+    b = (cb * cb_factor) + y
+    r = (cr * cr_factor) + y
+    g = ( y - (b * luma_coefficients_bgr[0] + r * luma_coefficients_bgr[2])) / luma_coefficients_bgr[1]
 
     r = r.unsqueeze(-1)
     g = g.unsqueeze(-1)
