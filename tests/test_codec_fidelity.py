@@ -87,4 +87,4 @@ def test_codec_fidelity(args):
         if avg_psnr == "Lossless" and avg_ssim == "Lossless":
             print(f"{os.path.basename(video_path):<20} | {'Lossless':<20} | {'Lossless':<20}  | {size_orig_mb:<20.1f} | {size_ztensor_mb:<30.1f} | {encode_time:20.1f} | {decode_time:20.1f}")
         else:
-            print(f"{os.path.basename(video_path):<20} | {avg_psnr:<20.2f} | {avg_ssim:<20.2f} | {size_orig_mb:<20.1f} | {size_ztensor_mb:<30.1f} | {encode_time:20.1f} | {decode_time:20.1f}")
+            print(f"{os.path.basename(video_path):<20} | {avg_psnr:<20.3f} | {avg_ssim:<20.3f} | {size_orig_mb:<20.1f} | {size_ztensor_mb:<30.1f} | {encode_time:20.1f} | {decode_time:20.1f}")
