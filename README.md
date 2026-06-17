@@ -8,7 +8,7 @@
 ### Experimental video codec built from scratch in Python and PyTorch
 
 
-Z-Tensor is an experimental video codec implemented manually in Python and PyTorch using tensors. Every core pixel-level operation runs as a native tensororized operation, and the heavy parts of the pipeline can run on CPU or GPU. Lossless and lossy modes are both supported. It features block matching motion estimation, a custom scene-aware I-frame selection, chroma subsampling and Zstandard compression.
+Z-Tensor is an experimental video codec implemented manually in Python and PyTorch using tensors. Every core pixel-level operation runs as a native tensorized operation, and the heavy parts of the pipeline can run on CPU or GPU. Lossless and lossy modes are both supported. It features block matching motion estimation, a custom scene-aware I-frame selection, chroma subsampling and Zstandard compression.
 
 The name comes from its two main components: **Z** from Zstandard, which is used as the compressor, while **Tensor** comes from PyTorch Tensors because the core pixel-level operations run as tensor ops, keeping the heavy lifting on the GPU.
 
@@ -80,20 +80,15 @@ ffmpeg -i source_video.avi -vf format=yuv420p -color_range pc  -c:v libx264 -pre
 **Quality reference:** PSNR above 40 dB and SSIM near 1.0 indicate very high fidelity reconstruction.
 
 
-| Video | Raw Video | H.264 | PSNR (dB) | SSIM |
-|---|---|---|---|---|
-| bowing_cif.avi | 87.0 MB | 12.4 MB | 45.55 | 1.00 | 
-| bus_cif.avi | 43.5 MB | 9.9 MB | 44.98 | 1.00 | 
-| carphone_qcif.avi | 27.7 MB | 5.1 MB | 44.95 | 1.00 |
-
-| Video | Raw Video | Z-Tensor | PSNR (dB) | SSIM | % of H.264
-|---|---|---|---|---|---
-| bowing_cif.avi | 87.0 MB | 15.8 MB | 44.82 | 1.00 | 78 %
-| bus_cif.avi | 43.5 MB | 12.4 MB | 40.89 | 1.00 | 80 % 
-| carphone_qcif.avi | 27.7 MB | 6.8 MB | 40.62 | 0.99 | 75 %
+| Video | Raw | Z-Tensor | H.264 | PSNR (Z-Tensor / H.264) | SSIM (Z-Tensor / H.264) | % of H.264 |
+|---|---|---|---|---|---|---|
+| bowing_cif.avi | 87.0 MB | 15.8 MB (5.5×) | 12.4 MB (7.0×) | 44.82 / 45.55 | 0.996 / 0.997 | 78% |
+| bus_cif.avi | 43.5 MB | 12.4 MB (3.5×) | 9.9 MB (4.4×) | 40.89 / 44.98 | 0.996 / 0.999 | 80% 
+| carphone_qcif.avi | 27.7 MB | 6.8 MB (4.1×) | 5.1 MB (5.4×) | 40.62 / 44.95 | 0.992 / 0.998 |  75% |
 
 
-Note: % of H.264 = Z-Tensor's compression ratio as a fraction of H.264's; 100% would mean matching it.
+
+Note: % of H.264 = Z-Tensor's compression ratio as a fraction of H.264's; 100% would mean Z-Tensor matches H.264.
 
 
 ### Lossless (`--chroma full -qp 0`)
@@ -105,17 +100,11 @@ Again, H.264 videos were encoded using the 'veryslow' preset and matching Z-Tens
 ffmpeg -i source_video.avi -c:v libx264rgb -preset veryslow -qp 0 -pix_fmt rgb24 -an h264_lossless.mkv
 ```
 
-| Video | Original | H.264 | PSNR (dB) | SSIM |
-|---|---|---|---|---|
-| bowing_cif.avi | 87.0 MB | 30.1 MB | Lossless | Lossless | 
-| bus_cif.avi | 43.5 MB | 23.7 MB | Lossless | Lossless | 
-| carphone_qcif.avi | 27.7 MB | 12.4 MB | Lossless | Lossless |
-
-| Video | Original | Z-Tensor | PSNR (dB) | SSIM | % of H.264
-|---|---|---|---|---|---
-| bowing_cif.avi | 87.0 MB | 38.7 MB | Lossless | Lossless | 78 %
-| bus_cif.avi | 43.5 MB | 29.6 MB | Lossless | Lossless | 80 % 
-| carphone_qcif.avi | 27.7 MB | 15.9 MB | Lossless | Lossless | 78 %
+| Video | Raw | Z-Tensor | H.264 |  PSNR (Z-Tensor / H.264) | SSIM (Z-Tensor / H.264) | % of H.264  |
+|---|---|---|---|---|---|---|
+| bowing_cif.avi | 87.0 MB | 38.7 MB (2.2×) | 30.1 MB (2.9×) | Lossless | Lossless    | 78% |
+| bus_cif.avi | 43.5 MB | 29.6 MB (1.5×) | 23.7 MB (1.8×) | Lossless | Lossless       | 80% |
+| carphone_qcif.avi | 27.7 MB | 15.9 MB (1.7×) | 12.4 MB (2.2×) | Lossless | Lossless | 78% |
 
 Note: % of H.264 = Z-Tensor's compression ratio as a fraction of H.264's; 100% would mean Z-Tensor matches H.264.
 
