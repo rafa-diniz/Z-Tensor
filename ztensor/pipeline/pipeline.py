@@ -8,7 +8,7 @@ from typing import Tuple
 
 
 def encode_pipeline(input_path: str, 
-                    device: torch.device, 
+                    device: torch.Device, 
                     memory_budget: int, 
                     compression_factor: int, 
                     num_threads: int, 
