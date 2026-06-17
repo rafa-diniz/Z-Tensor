@@ -8,12 +8,14 @@ from typing import Tuple
 
 
 def encode_pipeline(input_path: str, 
-                    device: torch.device, 
+                    device: torch.Device, 
                     memory_budget: int, 
                     compression_factor: int, 
                     num_threads: int, 
                     chroma_subsample: str, 
-                    quantization_parameter: bool
+                    quantization_parameter: bool,
+                    block_size: int,
+                    search_window: int
                     ) -> Tuple[torch.Tensor, bytes]:
 
     video_bgr         = video.read_video(input_path).to(device)
@@ -55,8 +57,8 @@ def encode_pipeline(input_path: str,
                                              num_threads, 
                                              pixel_format, 
                                              quantization_parameter,
-                                             block_width=8,
-                                             search_window=8
+                                             block_size,
+                                             search_window
                                              )
 
     return video_bgr, compressed_planes

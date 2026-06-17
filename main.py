@@ -17,7 +17,9 @@ if __name__ == '__main__':
                                             args.compression_factor, 
                                             args.threads,
                                             args.chroma,
-                                            args.quantization_parameter
+                                            args.quantization_parameter,
+                                            args.block_size,
+                                            args.search_window
                                             )
         
         # Writing encoded video
@@ -42,9 +44,4 @@ if __name__ == '__main__':
 
 
     elif args.test:
-        print("Calculating PSNR/SSIM scores")
-        print("-"*50)
-        print("PSNR: 0.0 to inf, with infinite being a perfect score.\nSSIM: 0.0 to 1.0, with 1.0 being a perfect score", end="\n\n")
-        print("Quality Reference:\nPSNR >= 40 dB, SSIM >= 0.95: Unnoticeable/Excelent Fidelity\nPSNR >= 30 dB, SSIM >= 0.90: Good Fidelity\n")
-
         test_codec_fidelity(args)
