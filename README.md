@@ -72,12 +72,12 @@ Tested on standard CIF/QCIF benchmark videos. Source clips are uncompressed raw 
 
 ### Balanced Mode (`--chroma quarter -qp 0`)
 
-H.264 videos were encoded using the 'veryslow' preset, matching Z-Tensor's lossless luma + 4:2:0 chroma subsampling for a fair comparison. Full H.264 command: 
+H.264 videos were encoded using the 'veryslow' preset and matching Z-Tensor's 4:2:0 chroma subsampling for a fair comparison. Full H.264 command: 
 ```
 ffmpeg -i source_video.avi -vf format=yuv420p -color_range pc  -c:v libx264 -preset veryslow -qp 0 -pix_fmt yuv420p -an h264_lossy.mkv
 ```
 
-**Quality reference:** PSNR above 40 dB and SSIM near 1.0 indicate very high fidelity reconstruction.
+**Quality reference:** PSNR above 40 dB and SSIM near 1.0 indicate very high fidelity reconstruction. Higher is better for both.
 
 
 | Video | Raw | Z-Tensor | H.264 | PSNR (Z-Tensor / H.264) | SSIM (Z-Tensor / H.264) | % of H.264 |
@@ -117,7 +117,7 @@ Z-Tensor reaches around 76-80% of H.264's compression ratio because H.264 has so
 
 I suspect DCT and CABAC are the two main drivers of H.264's performance, and it will be interesting to see how Z-Tensor evolves and closes the gap as more features are added.
 
-As for quality, Z-Tensor and H.264 perform comparably in PSNR and SSIM, trading the lead clip to clip. Inspecting the clips visually also confirms this, there is no noticeable differences between H.264 and Z-Tensor quality-wise.
+As for quality, Z-Tensor achieves broadly comparable visual metrics to H.264 on these samples, with one strong PSNR win, one near tie, and one loss. These differences are more bound to specific implementation details such as how the video is stored, how YCbCr values are quantized and stored, and how each codec implemented upsampling.
 
 ## How the encode pipeline works
 
