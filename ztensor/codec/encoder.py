@@ -11,7 +11,8 @@ def encode_video(planes: List[torch.Tensor],
                  i_frame_indices: torch.Tensor, 
                  compression_factor: int, 
                  num_threads: int, 
-                 pixel_format: str, 
+                 pixel_format: str,
+                 matrix_coefficients: str,
                  quantization_parameter: int,
                  block_size: int,
                  search_window: int
@@ -22,7 +23,8 @@ def encode_video(planes: List[torch.Tensor],
 
     num_planes = len(planes)
     num_frames = len(planes[0]) # All planes have the same number of frames, so just take this info from the first plane
-    header     = serialization.serialize_header(pixel_format, 
+    header     = serialization.serialize_header(pixel_format,
+                                                matrix_coefficients, 
                                                 quantization_parameter, 
                                                 i_frame_indices, 
                                                 block_size, 

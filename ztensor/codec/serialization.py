@@ -8,12 +8,13 @@ from typing import Tuple, List, Dict, Set
 from ztensor.effects import quantization
 
 def serialize_header(pixel_format: str, 
-                    quantization_parameter: int,
-                    i_frame_indices: torch.Tensor,
-                    block_size: int,
-                    num_frames: int,
-                    num_planes: int
-                     ) -> bytes:
+                     matrix_coefficients: str,
+                     quantization_parameter: int,
+                     i_frame_indices: torch.Tensor,
+                     block_size: int,
+                     num_frames: int,
+                     num_planes: int
+                      ) -> bytes:
     """Constructs the header for the .ztensor file format. 
 
     Args:
@@ -27,17 +28,21 @@ def serialize_header(pixel_format: str,
     Returns:
         bytes: The header
     """
-    header  = bytes()
+    header  = []
 
-    header += pixel_format.encode('ascii')
-    header += quantization_parameter.to_bytes(1, signed=False)            # uint8  value for the quantization parameter. 1 = Linear (less aggresive)
-    header += len(i_frame_indices).to_bytes(4, signed=False)              # uint32 the number of i-frames in the video
-    header += i_frame_indices.cpu().numpy().astype(np.uint32).tobytes()   # uint32 indices of the i-frames
-    header += block_size.to_bytes(4, signed=False)                       # uint32  the size of the motion blocks
+    header.append(pixel_format.encode('ascii'))
+    header.append(len(matrix_coefficients).to_bytes(1, signed=False))          # uint8   the length of the matrix coefficients metadata string
+    header.append(matrix_coefficients.encode('ascii'))                         # str     the matrix coefficient metadata reference.
+    header.append(quantization_parameter.to_bytes(1, signed=False))            # uint8   value for the quantization parameter. 1 = Linear (less aggresive)
+    header.append(len(i_frame_indices).to_bytes(4, signed=False))              # uint32  the number of i-frames in the video
+    header.append(i_frame_indices.cpu().numpy().astype(np.uint32).tobytes())   # uint32  indices of the i-frames
+    header.append(block_size.to_bytes(4, signed=False))                        # uint32  the size of the motion blocks
     
-    header += num_planes.to_bytes(4,  signed=False)                       # uint32 the number of planes in the video.
-    header += num_frames.to_bytes(4,  signed=False)                       # uint32 the number of frames
+    header.append(num_planes.to_bytes(4,  signed=False))                       # uint32 the number of planes in the video.
+    header.append(num_frames.to_bytes(4,  signed=False))                       # uint32 the number of frames
 
+    header = b"".join(header)
+    
     return header
 
 
@@ -128,7 +133,7 @@ def serialize_payload(motion_vectors: torch.Tensor,
 
 
 
-def deserialize_payload(compressed_bytes: bytes, device: torch.device) -> Tuple[List[Dict], Set, str]:
+def deserialize_payload(compressed_bytes: bytes, device: torch.device) -> Tuple[List[Dict], Set, str, str]:
     """Decodes the video's entire byte sequence
 
     Args:
@@ -143,6 +148,12 @@ def deserialize_payload(compressed_bytes: bytes, device: torch.device) -> Tuple[
 
     pixel_format  = decompressed_bytes[current_byte : current_byte+4].decode('ascii')
     current_byte += 4
+
+    len_matrix_coefficients_spec = int.from_bytes(decompressed_bytes[current_byte : current_byte+1], signed=False)
+    current_byte                 += 1
+
+    matrix_coefficients = decompressed_bytes[current_byte : current_byte + len_matrix_coefficients_spec].decode('ascii')
+    current_byte       += len_matrix_coefficients_spec
 
     quantization_parameter = int.from_bytes(decompressed_bytes[current_byte : current_byte+1], signed=False)
     current_byte          += 1
@@ -236,4 +247,4 @@ def deserialize_payload(compressed_bytes: bytes, device: torch.device) -> Tuple[
             'block_size': block_size
         })
     
-    return all_planes_data, i_frame_set, pixel_format
+    return all_planes_data, i_frame_set, pixel_format, matrix_coefficients
