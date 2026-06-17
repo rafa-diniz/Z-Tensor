@@ -19,6 +19,7 @@ The name comes from its two main components: **Z** from Zstandard, which is used
 * Block matching motion estimation implemented with PyTorch tensor operations
 * Motion vectors and residual coding for P-frame reconstruction
 * Scene-aware I-frame selection using histogram deltas and edge variance
+* Implemented BT.709-6 and BT.601-7 for industry-standard YCbCr coefficients
 * Chroma subsampling modes: 4:4:4, 4:2:2 and 4:2:0
 * Lossless and lossy modes supported
 * Custom ```.ztensor``` serialization format with Zstandard compression backend
@@ -81,9 +82,9 @@ ffmpeg -i source_video.avi -vf format=yuv420p -color_range pc  -c:v libx264 -pre
 
 | Video | Raw | Z-Tensor | H.264 | PSNR (Z-Tensor / H.264) | SSIM (Z-Tensor / H.264) | % of H.264 |
 |---|---|---|---|---|---|---|
-| bowing_cif.avi | 87.0 MB | 15.8 MB (5.5×) | 12.4 MB (7.0×) | 44.820 / 45.548 | 0.996 / 0.997 | 78% |
-| bus_cif.avi | 43.5 MB | 12.4 MB (3.5×) | 9.9 MB (4.4×) | 40.887 / 44.976 | 0.996 / 0.999 | 80% |
-| carphone_qcif.avi | 27.7 MB | 6.8 MB (4.1×) | 5.1 MB (5.4×) | 40.623 / 44.952 | 0.992 / 0.998 |  75% |
+| bowing_cif.avi | 87.0 MB | 15.9 MB (5.5×) | 12.4 MB (7.0×) | 49.655 / 45.548 | 0.997 / 0.997 | 78% |
+| bus_cif.avi | 43.5 MB | 12.3 MB (3.5×) | 9.9 MB (4.4×) | 44.408 / 44.976 | 0.997 / 0.999 | 80% |
+| carphone_qcif.avi | 27.7 MB | 6.7 MB (4.1×) | 5.1 MB (5.4×) | 43.306 / 44.952 | 0.994 / 0.998 |  76% |
 
 
 Note: % of H.264 = Z-Tensor's compression ratio as a fraction of H.264's; 100% would mean Z-Tensor matches H.264.
@@ -108,7 +109,7 @@ Note: % of H.264 = Z-Tensor's compression ratio as a fraction of H.264's; 100% w
 
 ## Z-Tensor compared to H.264
 
-Z-Tensor reaches around 75-80% of H.264's compression ratio because H.264 has some components that Z-Tensor doesn't:
+Z-Tensor reaches around 76-80% of H.264's compression ratio because H.264 has some components that Z-Tensor doesn't:
 
 - H.264 uses a DCT to discard high-frequency details that are largely unnoticeable to our eyes. Because this packs the residuals into fewer values, compression can be improved by a noticeable margin. This one is on the roadmap and should be added in future versions.
 - CABAC is H.264's entropy coder that was built from the ground up to be a compressor for video, and it makes a huge difference. Back when H.264 launched, CABAC was one of its main highlighted features. Z-Tensor uses Zstandard, which is a great compression tool, but it was built to be a general-purpose compressor, while CABAC was built specifically for video, which widens the gap in H.264's favor. 
@@ -116,7 +117,7 @@ Z-Tensor reaches around 75-80% of H.264's compression ratio because H.264 has so
 
 I suspect DCT and CABAC are the two main drivers of H.264's performance, and it will be interesting to see how Z-Tensor evolves and closes the gap as more features are added.
 
-As for the slightly better PSNR and SSIM values, Z-Tensor's chroma subsampling uses average-pool downsampling and bilinear upsampling, which is less refined than H.264's chroma resampling and costs some color fidelity on movement-heavy clips.
+As for quality, Z-Tensor and H.264 perform comparably in PSNR and SSIM, trading the lead clip to clip. Inspecting the clips visually also confirms this, there is no noticeable differences between H.264 and Z-Tensor quality-wise.
 
 ## How the encode pipeline works
 
@@ -257,14 +258,14 @@ near scene cut)        │      near scene cut)
 
 ### Chroma Subsampling
 
-Human eyes are much more sensitive to changes in brightness than to changes in color. Chroma subsampling is a pretty interesting technique that works in two steps: first it converts a BGR image into a YUV image, where Y is the brightness component and U and V are the two chromatic components that carry color information. Then, it takes advantage of how human eyes work and lowers the resolution of the U and V channels to save on disk space. This is naturally a lossy operation, but in practice it loses so little detail that it is nearly unnoticeable to our eyes.
+Human eyes are much more sensitive to changes in brightness than to changes in color. Chroma subsampling is a pretty interesting technique that works in two steps: first it converts a BGR image into a YCbCr image, where Y is the brightness component and U and V are the two chromatic components that carry color information. Then, it takes advantage of how human eyes work and lowers the resolution of the U and V channels to save on disk space. This is naturally a lossy operation, but in practice it loses so little detail that it is nearly unnoticeable to our eyes.
 
 There are different ways to implement this drop in resolution, with the most common approaches being called 4:2:2 (also called half-width) and 4:2:0 (also called quarter). 4:2:2 halves the resolution on the horizontal axis, while keeping the Y resolution the same. Meanwhile, 4:2:0 halves the resolution of both horizontal and vertical axes, making the resolution of the U and V channels a quarter of the original.
 
 In this implementation, chroma subsampling is represented as average pooling over the U and V planes. `AvgPool2d` can do it natively on the GPU:
 
 ```python
-# BGR to YUV color space conversion
+# BGR to YCbCr color space conversion
 y = torch.sum(bgr * weights, dim=-1)
 u = 128 + (0.492 * (b - y))
 v = 128 + (0.877 * (r - y))
