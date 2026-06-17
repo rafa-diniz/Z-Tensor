@@ -52,7 +52,7 @@ The goal here is to build a codec from the ground up to understand how it works 
 
 ## Showcase
 
-These frames come from a video that Z-Tensor encoded at 7.4× compression using Balanced mode.
+These frames come from a video that Z-Tensor encoded at 7.5× compression using Balanced mode.
 
 **PSNR:** 47.440 dB &nbsp;|&nbsp; **SSIM:** 0.994 &nbsp;|&nbsp; **Compression:** 7.5× &nbsp;|&nbsp; **File sizes:** 316.4 MB (Raw Video) to 42.4 MB (Z-Tensor)
 
@@ -117,7 +117,7 @@ Z-Tensor reaches around 76-80% of H.264's compression ratio because H.264 has so
 
 I suspect DCT and CABAC are the two main drivers of H.264's performance, and it will be interesting to see how Z-Tensor evolves and closes the gap as more features are added.
 
-As for quality, Z-Tensor achieves broadly comparable visual metrics to H.264 on these samples, with one strong PSNR win, one near tie, and one loss. These differences are more tied to specific implementation details such as how the video itself is stored, how YCbCr values are quantized and stored, and how CbCr upsampling is implemented.
+As for quality, Z-Tensor achieves broadly comparable visual metrics to H.264 on these samples, with SSIM being essentially tied across all videos and PSNR being more mixed, with one strong PSNR win for Z-Tensor, one near tie, and one loss. I suspect these differences are more tied to specific implementation details such as how YCbCr values are quantized and stored, and how chroma is subsampled and then reconstructed in each codec. 
 
 ## How the encode pipeline works
 
