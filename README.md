@@ -19,7 +19,7 @@ The name comes from its two main components: **Z** from Zstandard, which is used
 * Block matching motion estimation implemented with PyTorch tensor operations
 * Motion vectors and residual coding for P-frame reconstruction
 * Scene-aware I-frame selection using histogram deltas and edge variance
-* Implemented BT.709-6 and BT.601-7 for industry-standard YCbCr color coefficients
+* Industry-standard BT.709-6 and BT.601-7 matrices for RGB-to-YCbCr and YCbCr-to-RGB conversion
 * Chroma subsampling modes: 4:4:4, 4:2:2 and 4:2:0
 * Lossless and lossy modes supported
 * Custom ```.ztensor``` serialization format with Zstandard compression backend
