@@ -54,7 +54,7 @@ The goal here is to build a codec from the ground up to understand how it works 
 
 These frames come from a video that Z-Tensor encoded at 7.4x compression using Balanced mode.
 
-**PSNR:** 43.26 dB &nbsp;|&nbsp; **SSIM:** 0.99 &nbsp;|&nbsp; **Compression:** 7.4× &nbsp;|&nbsp; **File sizes:** 316.4 MB (Original) to 42.9 MB (Z-Tensor)
+**PSNR:** 43.26 dB &nbsp;|&nbsp; **SSIM:** 0.99 &nbsp;|&nbsp; **Compression:** 7.4× &nbsp;|&nbsp; **File sizes:** 316.4 MB (Raw Video) to 42.9 MB (Z-Tensor)
 
 **Original frame**
 
@@ -80,17 +80,17 @@ ffmpeg -i source_video.avi -vf format=yuv420p -color_range pc  -c:v libx264 -pre
 **Quality reference:** PSNR above 40 dB and SSIM near 1.0 indicate very high fidelity reconstruction.
 
 
-| Video | Original | H.264 | PSNR (dB) | SSIM |
+| Video | Raw Video | H.264 | PSNR (dB) | SSIM |
 |---|---|---|---|---|
 | bowing_cif.avi | 87.0 MB | 12.4 MB | 45.55 | 1.00 | 
 | bus_cif.avi | 43.5 MB | 9.9 MB | 44.98 | 1.00 | 
 | carphone_qcif.avi | 27.7 MB | 5.1 MB | 44.95 | 1.00 |
 
-| Video | Original | Z-Tensor | PSNR (dB) | SSIM | % of H.264
+| Video | Raw Video | Z-Tensor | PSNR (dB) | SSIM | % of H.264
 |---|---|---|---|---|---
-| bowing_cif.avi | 87.0 MB | 16.2 MB | 44.82 | 1.00 | 77 %
-| bus_cif.avi | 43.5 MB | 12.5 MB | 40.89 | 1.00 | 79 % 
-| carphone_qcif.avi | 27.7 MB | 6.9 MB | 40.62 | 0.99 | 74 %
+| bowing_cif.avi | 87.0 MB | 15.8 MB | 44.82 | 1.00 | 78 %
+| bus_cif.avi | 43.5 MB | 12.4 MB | 40.89 | 1.00 | 80 % 
+| carphone_qcif.avi | 27.7 MB | 6.8 MB | 40.62 | 0.99 | 75 %
 
 
 Note: % of H.264 = Z-Tensor's compression ratio as a fraction of H.264's; 100% would mean matching it.
@@ -113,15 +113,15 @@ ffmpeg -i source_video.avi -c:v libx264rgb -preset veryslow -qp 0 -pix_fmt rgb24
 
 | Video | Original | Z-Tensor | PSNR (dB) | SSIM | % of H.264
 |---|---|---|---|---|---
-| bowing_cif.avi | 87.0 MB | 39.8 MB | Lossless | Lossless | 76 %
-| bus_cif.avi | 43.5 MB | 29.8 MB | Lossless | Lossless | 80 % 
-| carphone_qcif.avi | 27.7 MB | 16.0 MB | Lossless | Lossless | 78 %
+| bowing_cif.avi | 87.0 MB | 38.7 MB | Lossless | Lossless | 78 %
+| bus_cif.avi | 43.5 MB | 29.6 MB | Lossless | Lossless | 80 % 
+| carphone_qcif.avi | 27.7 MB | 15.9 MB | Lossless | Lossless | 78 %
 
 Note: % of H.264 = Z-Tensor's compression ratio as a fraction of H.264's; 100% would mean Z-Tensor matches H.264.
 
 ## Z-Tensor compared to H.264
 
-Z-Tensor reaches around 70-80% of H.264's performance because H.264 has some components that Z-Tensor doesn't:
+Z-Tensor reaches around 75-80% of H.264's performance because H.264 has some components that Z-Tensor doesn't:
 
 - H.264 uses a DCT to discard high-frequency details that are largely unnoticeable to our eyes. Because this packs the residuals into fewer values, compression can be improved by a noticeable margin. This one is on the roadmap and should be added in future versions.
 - CABAC is H.264's entropy coder that was built from the ground up to be a compressor for video, and it makes a huge difference. Back when H.264 launched, CABAC was one of its main highlighted features. Z-Tensor uses Zstandard, which is a great compression tool, but it was built to be a general-purpose compressor, while CABAC was built specifically for video, which widens the gap in H.264's favor. 
@@ -325,7 +325,7 @@ The fix is to append each component to a `list` instead, then call `b"".join()` 
 ```python
 # Slow: reallocates and copies the entire buffer on every +=
 payload = bytes()
-payload += motion_vectors.numpy().tobytes()  # O(N²) total
+payload += motion_vectors.numpy().tobytes()  # O(N^2) total
 
 # Fast: no copies until the final join
 payload = []
