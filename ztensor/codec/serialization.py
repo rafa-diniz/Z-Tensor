@@ -149,7 +149,7 @@ def deserialize_payload(compressed_bytes: bytes, device: torch.device) -> Tuple[
 
     datatype_residues_np    = np.int8      if quantization_parameter in [1] else np.uint8
     datatype_residues_torch = torch.int16  if quantization_parameter in [1] else torch.uint8
-    num_bytes_per_pixel   = 1
+    num_bytes_per_pixel     = 1
 
     num_i_frames  = int.from_bytes(decompressed_bytes[current_byte : current_byte+4], signed=False)
     current_byte += 4
