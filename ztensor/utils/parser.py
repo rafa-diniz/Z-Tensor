@@ -30,14 +30,14 @@ def make_parser() -> ArgumentParser:
     
     parser.add_argument('-c', '--chroma', type=str, default='quarter', choices=['full', 'half-width', 'quarter'], help="The level for chroma subsampling. \'full\' is 4:4:4/No chroma subsampling, \'half-width\' is 4:2:2, \'quarter\' is 4:2:0. Default = half-width")
 
-    parser.add_argument('-qp', '--quantization-parameter', type=int, default=0, help="Quantizes the residuals to improve compression ratios by forcing multiple residuals into the same bins. 0 = No Quantization (lossless residuals), 1 = Linear (lossy). Default = 0")
+    parser.add_argument('-qp', '--quantization-parameter', type=int, default=0, help="Quantizes the residuals to improve compression ratios by mapping multiple residuals into the same bins. 0 = No Quantization (lossless residuals), 1 = Linear (lossy). Default = 0")
 
     parser.add_argument('-b', '--block-size', type=int, default=8, help="The size (width and height) of the blocks used for motion estimation. Larger values can make encoding faster, but may slightly increase file size. Default = 8.")
 
-    parser.add_argument('-s', '--search-window', type=int, default=8, help="The size of the lookup area for block matching. Total number of comparisons is this value squared. Can improve compression gains at the cost of more compute. Default = 8.")
+    parser.add_argument('-s', '--search-window', type=int, default=12, help="The size block matching's search window. Larger values can improve compression gains at the cost of more compute and memory. Default = 12.")
 
-    parser.add_argument('-mem', type=str, default='2G',
-                        help="The amount of memory that the motion estimation algorithm is allowed to use. Use G for GB and M for MB. The codec respects this memory limit regardless of the value for \'-device\'. Default = 2G")
+    parser.add_argument('-mem', type=str, default='4G',
+                        help="The amount of memory that the motion estimation algorithm is allowed to use. Use G for GB and M for MB. The codec respects this memory limit regardless of the value for \'-device\'. Default = 4G")
 
     parser.add_argument('-device', type=str, default='0',
                         help="Use \"cpu\" to run on the CPU and numbers to select which GPU to use. Default = cuda:0")
