@@ -8,7 +8,7 @@
 ### Experimental video codec built from scratch in Python and PyTorch
 
 
-Z-Tensor is an experimental video codec implemented manually in Python and PyTorch using tensors. Every core pixel-level operation runs as a native tensorized operation, and the heavy parts of the pipeline can run on CPU or GPU. Lossless and lossy modes are both supported. It features block matching motion estimation, a custom scene-aware I-frame selection, chroma subsampling and Zstandard compression.
+Z-Tensor is an experimental video codec implemented manually in Python and PyTorch using tensors. Every core pixel-level operation runs as a native tensorized operation, and the heavy parts of the pipeline can run on CPU or GPU. It supports lossless residual storage, chroma subsampling, and linear residual quantization. It features block matching motion estimation, a custom scene-aware I-frame selection, chroma subsampling and Zstandard compression.
 
 The name comes from its two main components: **Z** from Zstandard, which is used as the compressor, while **Tensor** comes from PyTorch Tensors because the core pixel-level operations run as tensor ops, keeping the heavy lifting on the GPU.
 
@@ -21,7 +21,7 @@ The name comes from its two main components: **Z** from Zstandard, which is used
 * Scene-aware I-frame selection using histogram deltas and edge variance
 * Industry-standard BT.709-6 and BT.601-7 matrices for RGB-to-YCbCr and YCbCr-to-RGB conversion
 * Chroma subsampling modes: 4:4:4, 4:2:2 and 4:2:0
-* Lossless and lossy modes supported
+* Lossless residual storage, chroma subsampling, and optional residual quantization
 * Custom ```.ztensor``` serialization format with Zstandard compression backend
 * CPU/GPU execution
 * PSNR/SSIM evaluation on benchmark videos
@@ -46,7 +46,7 @@ As for CUDA, the reason Z-Tensor is currently implemented in Python + PyTorch is
 
 Z-Tensor is an experimental codec and not a replacement for production codecs such as H.264, HEVC, or AV1.
 
-The goal here is to build a codec from the ground up to understand how it works internally from a systems perspective and to see where the performance bottlenecks are. While I am not trying to beat industry-grade codecs, I offer comparisons to H.264 in the Results table to offer some perspective of how Z-Tensor compares.
+The goal here is to build a codec from the ground up to understand how it works internally from a systems perspective and to see where the performance bottlenecks are. The H.264 comparisons in the Results section are included only as reference points, not as claims that Z-Tensor is competitive with production codecs.
 
 ---
 
@@ -72,7 +72,9 @@ Tested on standard CIF/QCIF benchmark videos. Source clips are uncompressed raw 
 
 ### Balanced Mode (`--chroma quarter -qp 0`)
 
-H.264 videos were encoded using the 'veryslow' preset and matching Z-Tensor's 4:2:0 chroma subsampling for a fair comparison. Full H.264 command: 
+Z-Tensor's Balanced mode uses 4:2:0 chroma subsampling and stores residuals losslessly, making chroma subsampling the only lossy step. Because of this, I used ```-c:v libx264``` with ```format=yuv420p```, ```-preset veryslow```, and ```-qp 0``` when comparing against H.264. The idea is to compare Z-Tensor against H.264 in a similar high-fidelity 4:2:0 setup, rather than against a normal bitrate-controlled setup.
+
+Full H.264 command used:
 ```
 ffmpeg -i source_video.avi -vf format=yuv420p -color_range pc  -c:v libx264 -preset veryslow -qp 0 -pix_fmt yuv420p -an h264_lossy.mkv
 ```
@@ -87,8 +89,7 @@ ffmpeg -i source_video.avi -vf format=yuv420p -color_range pc  -c:v libx264 -pre
 | carphone_qcif.avi | 27.7 MB | 6.7 MB (4.1×) | 5.1 MB (5.4×) | 43.306 / 44.952 | 0.994 / 0.998 |  76% |
 
 
-Note: % of H.264 = Z-Tensor's compression ratio as a fraction of H.264's; 100% would mean Z-Tensor matches H.264.
-
+Note: % of H.264 = Z-Tensor's compression ratio divided by H.264's; 100% would mean both reached the same compression ratio.
 
 ### Lossless (`--chroma full -qp 0`)
 
@@ -105,19 +106,23 @@ ffmpeg -i source_video.avi -c:v libx264rgb -preset veryslow -qp 0 -pix_fmt rgb24
 | bus_cif.avi | 43.5 MB | 29.6 MB (1.5×) | 23.7 MB (1.8×) | Lossless / Lossless | Lossless / Lossless     | 80% |
 | carphone_qcif.avi | 27.7 MB | 15.9 MB (1.7×) | 12.4 MB (2.2×) | Lossless / Lossless | Lossless / Lossless | 78% |
 
-Note: % of H.264 = Z-Tensor's compression ratio as a fraction of H.264's; 100% would mean Z-Tensor matches H.264.
+Note: % of H.264 = Z-Tensor's compression ratio divided by H.264's; 100% would mean both reached the same compression ratio.
 
 ## Z-Tensor compared to H.264
 
-Z-Tensor reaches around 76-80% of H.264's compression ratio because H.264 has some components that Z-Tensor doesn't:
+Z-Tensor reaches around 76–80% of H.264's compression ratio on the tested CIF/QCIF clips.
 
-- H.264 uses a DCT to discard high-frequency details that are largely unnoticeable to our eyes. Because this packs the residuals into fewer values, compression can be improved by a noticeable margin. This one is on the roadmap and should be added in future versions.
-- CABAC is H.264's entropy coder that was built from the ground up to be a compressor for video, and it makes a huge difference. Back when H.264 launched, CABAC was one of its main highlighted features. Z-Tensor uses Zstandard, which is a great compression tool, but it was built to be a general-purpose compressor, while CABAC was built specifically for video, which widens the gap in H.264's favor. 
-- H.264 supports B-frames, meaning that reference frames can come from past or future frames. This means H.264's residuals have more options of what reference frame to use, which can help block matching find more similar blocks and improve compression.
+This result should be read in context, since both encoders are being tested in a high-fidelity 4:2:0 setup. Z-Tensor uses ```--chroma quarter -qp 0```, while H.264 uses ```format=yuv420p``` and is encoded with ```-qp 0```, making this not a normal bitrate-controlled H.264 benchmark, but a high-fidelity 4:2:0 comparison.
 
-I suspect DCT and CABAC are the two main drivers of H.264's performance, and it will be interesting to see how Z-Tensor evolves and closes the gap as more features are added.
+H.264 still compresses better because it has some neat features that Z-Tensor doesn't:
 
-As for quality, Z-Tensor achieves broadly comparable visual metrics to H.264 on these samples, with SSIM being essentially tied across all videos and PSNR being more mixed, with one strong PSNR win for Z-Tensor, one near tie, and one loss. I suspect these differences are more tied to specific implementation details such as how YCbCr values are quantized and stored, and how chroma is subsampled and then reconstructed in each codec. 
+- CABAC is H.264's entropy coder that was built from the ground up to be a compressor for video, and it makes a huge difference. Z-Tensor uses Zstandard, which is a great compression tool, but it was built to be a general-purpose compressor, while CABAC was built specifically for video, which widens the gap in H.264's favor. 
+- Z-Tensor uses fixed-size blocks in block matching, while H.264 supports variable-size blocks. This means H.264 can dynamically select larger blocks for homogeneous regions and smaller blocks for more detailed ones on-the-fly, improving compression.
+- H.264 supports B-frames, meaning that reference frames can come from past or future frames. This gives H.264's motion search more reference options, which can improve prediction and reduce residual size.
+
+I suspect these are the main drivers of H.264's performance, and it will be interesting to see how Z-Tensor evolves and closes the gap as more features are added.
+
+As for quality, Z-Tensor achieves broadly comparable visual metrics on these samples. SSIM is very close across all videos, while PSNR is mixed (one strong win for Z-Tensor, one close result, and one loss). I suspect those differences are mostly tied to implementation details such as YCbCr conversion, rounding, chroma subsampling, and chroma reconstruction.
 
 ## How the encode pipeline works
 
@@ -143,7 +148,7 @@ Raw video (BGR)
       │
       ├──► I-frames are used as references for frame reconstruction.
       ▼
-  Apply chroma subsampling: 4:4:4 / 4:2:2 / 4:2:0 (Optional)
+  Apply chroma subsampling (Optional)
       │
       ▼
   Block matching
