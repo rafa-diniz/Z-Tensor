@@ -270,18 +270,21 @@ There are different ways to implement this drop in resolution, with the most com
 In this implementation, chroma subsampling is represented as average pooling over the U and V planes. `AvgPool2d` can do it natively on the GPU:
 
 ```python
-# BGR to YCbCr color space conversion
-y = torch.sum(bgr * weights, dim=-1)
-u = 128 + (0.492 * (b - y))
-v = 128 + (0.877 * (r - y))
+# BGR to YCbCr color space conversion using BT.709-6
+weights = torch.tensor([0.0722, 0.7152, 0.2126])
+y       = torch.sum(bgr * weights, dim=-1)
+cb      = 128 + ((b - y) / 1.8556)
+cr      = 128 + ((r - y) / 1.5748)
 
-# 4:2:2: halve U and V on the X axis
+cbcr = torch.concat(cb, cr, dim=-1)
+
+# Chroma subsampling 4:2:2: halve Cb and Cb on the X axis
 pool2d = torch.nn.AvgPool2d(kernel_size=(1, 2), stride=(1, 2))
-uv_subsampled = pool2d(uv)
+cbcr_subsampled = pool2d(cbcr)
 
-# 4:2:0: halve U and V in both the X and Y axes
+# Chroma subsampling 4:2:0: halve U and V in both the X and Y axes
 pool2d = torch.nn.AvgPool2d(kernel_size=2, stride=2)
-uv_subsampled = pool2d(uv)
+cbcr_subsampled = pool2d(cbcr)
 ```
 
 The decoder then upsamples the U and V planes before converting to BGR.
