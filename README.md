@@ -278,11 +278,11 @@ cr      = 128 + ((r - y) / 1.5748)
 
 cbcr    = torch.concat(cb, cr, dim=-1)
 
-# Chroma subsampling 4:2:2: halve Cb and Cb on the X axis
+# Chroma subsampling 4:2:2: halve Cb and Cr on the X axis
 pool2d          = torch.nn.AvgPool2d(kernel_size=(1, 2), stride=(1, 2))
 cbcr_subsampled = pool2d(cbcr)
 
-# Chroma subsampling 4:2:0: halve U and V in both the X and Y axes
+# Chroma subsampling 4:2:0: halve Cb and Cr in both the X and Y axes
 pool2d          = torch.nn.AvgPool2d(kernel_size=2, stride=2)
 cbcr_subsampled = pool2d(cbcr)
 ```
